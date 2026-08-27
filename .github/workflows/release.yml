@@ -13,11 +13,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
       - name: Build release package
         shell: powershell
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          .\package_release.ps1 -Version $version
+          dotnet build overlay_cs\SystemAudioOverlay.csproj --configuration Release
+          dotnet build overlay_cs\OverlayCapture.csproj --configuration Release
+          .\package_release.ps1 -Version $version -SkipBuild
       - name: Publish GitHub Release
         shell: powershell
         env:

@@ -1,4 +1,7 @@
-param([string]$Version = "0.1.0")
+param(
+    [string]$Version = "0.1.0",
+    [switch]$SkipBuild
+)
 
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -10,8 +13,10 @@ if ($Version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
     throw "版本号格式无效：$Version"
 }
 
-& (Join-Path $ProjectDir "build_overlay.ps1")
-if ($LASTEXITCODE -ne 0) { throw "Overlay 构建失败。" }
+if (-not $SkipBuild) {
+    & (Join-Path $ProjectDir "build_overlay.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "Overlay 构建失败。" }
+}
 
 New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 if (Test-Path -LiteralPath $StageDir) { throw "暂存目录已存在，请先处理：$StageDir" }
@@ -38,6 +43,8 @@ Get-ChildItem -LiteralPath (Join-Path $ProjectDir "tests") -File -Filter "*.py" 
 New-Item -ItemType Directory -Path (Join-Path $StageDir "overlay_cs\bin") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\OverlayApp.cs") -Destination (Join-Path $StageDir "overlay_cs")
 Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\OverlayCapture.cs") -Destination (Join-Path $StageDir "overlay_cs")
+Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\SystemAudioOverlay.csproj") -Destination (Join-Path $StageDir "overlay_cs")
+Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\OverlayCapture.csproj") -Destination (Join-Path $StageDir "overlay_cs")
 Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\bin\SystemAudioOverlay.exe") -Destination (Join-Path $StageDir "overlay_cs\bin")
 Copy-Item -LiteralPath (Join-Path $ProjectDir "overlay_cs\bin\OverlayCapture.exe") -Destination (Join-Path $StageDir "overlay_cs\bin")
 
