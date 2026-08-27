@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Speaker = "",
     [ValidateSet("auto", "cpu", "cuda:0")][string]$Device = "auto",
     [double]$SilenceDb = -42.0,

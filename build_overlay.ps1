@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Source = Join-Path $ProjectDir "overlay_cs\OverlayApp.cs"
 $OutputDir = Join-Path $ProjectDir "overlay_cs\bin"

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Cuda,
     [switch]$Cpu
 )
