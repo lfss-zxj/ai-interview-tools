@@ -1,0 +1,51 @@
+name: Bug report
+description: 报告可复现的安装、识别、Overlay 或 AI 问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 提交前请先运行 `verify_install.ps1`，并删除日志中的个人内容和密钥。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你期望发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 执行 ...
+        2. 播放 ...
+        3. 看到 ...
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: CPU / GPU
+      placeholder: RTX 4060，驱动版本；或 CPU 型号
+  - type: textarea
+    id: verify
+    attributes:
+      label: 自检输出
+      description: 粘贴 `verify_install.ps1` 的输出，请勿粘贴 API Key。
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 可粘贴 `.runtime/service.err.log` 的相关片段，请先删除语音内容、路径和其他隐私。
+      render: shell

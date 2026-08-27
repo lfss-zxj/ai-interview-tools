@@ -11,6 +11,8 @@ __pycache__/
 overlay_cs/bin/
 qa/
 .build-check/
+.runtime/
+dist/
 
 # User-local settings and secrets (normally stored outside the repository)
 config.json

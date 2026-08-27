@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install compatible CPU runtime
+        run: python -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+      - name: Install project
+        run: python -m pip install -e ".[test]"
+      - name: Check dependencies
+        run: python -m pip check
+      - name: Run tests
+        run: python -m pytest
+      - name: Build WPF Overlay
+        shell: powershell
+        run: .\build_overlay.ps1
+      - name: Verify build outputs
+        shell: powershell
+        run: |
+          if (-not (Test-Path overlay_cs\bin\SystemAudioOverlay.exe)) { throw "Overlay build missing" }
+          if (-not (Test-Path overlay_cs\bin\OverlayCapture.exe)) { throw "Capture helper build missing" }

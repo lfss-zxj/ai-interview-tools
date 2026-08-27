@@ -1,5 +1,11 @@
 # VoxRibbon（声幕）
 
+[![CI](https://github.com/lfss-zxj/ai-interview-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/lfss-zxj/ai-interview-tools/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](DEPLOYMENT.md)
+
+![VoxRibbon AI 面试助手封面](assets/cover-4x3.png)
+
 **VoxRibbon** 是一款专为远程面试设计的开源桌面工具，它通过 **WASAPI Loopback** 捕获系统音频，利用本地 **Paraformer** 模型实现低延迟中文语音识别，并通过悬浮窗口（Overlay）实时显示字幕和 AI 生成的回答。
 
 ## ✨ 核心特性
@@ -32,12 +38,15 @@
 .\install.ps1 -Cuda
 
 # 或 CPU 版
-.\install.ps1
+.\install.ps1 -Cpu
 
-.\start.ps1
+# 安装完成后一键启动 ASR 与 Overlay
+.\launch.ps1
 ```
 
 首次启动会从 ModelScope 下载模型，需要联网等待几分钟。启动后打开 <http://127.0.0.1:8765> 查看实时字幕，WebSocket 地址是 `ws://127.0.0.1:8765/ws`。
+
+从 Python 安装、CUDA/CPU 选择到实际链路验收的说明，请查看 [Windows 完整部署指南](DEPLOYMENT.md)。安装后可运行 `.\verify_install.ps1` 执行依赖、测试、播放设备和 Overlay 编译自检。
 
 ## 播放设备
 
@@ -139,3 +148,5 @@ Overlay 在没有聊天内容、刚启动或重置上下文后不会消失，而
 ## License
 
 [MIT License](LICENSE)
+
+贡献代码请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按照 [SECURITY.md](SECURITY.md) 报告；版本变化见 [CHANGELOG.md](CHANGELOG.md)。
