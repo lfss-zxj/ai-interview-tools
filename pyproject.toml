@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wasapi-paraformer-ws"
+version = "0.1.0"
+description = "Windows real-time system-audio captions and streaming AI interview assistant"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "funasr>=1.2.7,<2",
+  "modelscope>=1.20,<2",
+  "numpy>=1.24,<3",
+  "soundcard>=0.4.3,<0.5",
+  "soxr>=1.0,<2",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+system-audio-asr = "system_audio_asr.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["system_audio_asr*"]
+
+[tool.setuptools.package-data]
+system_audio_asr = ["web/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

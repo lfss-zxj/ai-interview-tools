@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.wheel_cache/
+*.egg-info/
+*.log
+*.err.log
+
+# Local builds and validation artifacts
+overlay_cs/bin/
+qa/
+.build-check/
+
+# User-local settings and secrets (normally stored outside the repository)
+config.json
+deepseek.key
+.env
+.env.*
+
+# Editors and operating systems
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

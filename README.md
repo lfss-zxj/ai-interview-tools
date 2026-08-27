@@ -1,0 +1,143 @@
+# VoxRibbon（声幕）
+
+> 将电脑声音实时转为中文字幕，并由 AI 流式分析对话、即时生成面试回答建议的 Windows 智能面试助手。
+
+VoxRibbon 通过 WASAPI Loopback 捕获电脑正在播放的声音，使用 Paraformer Streaming 进行低延迟中文语音识别，并把字幕呈现在不干扰操作的 Windows 桌面 Overlay 中。音频停顿后，可调用 DeepSeek 延续上下文并流式生成回答建议，适合线上面试、会议辅助、课程记录和视频字幕等场景。
+
+```text
+系统播放声音 → WASAPI Loopback → 16 kHz PCM → Paraformer Streaming
+                                              ↓
+桌面字幕 Overlay ← WebSocket partial / final ←┘
+       ↓
+连续对话上下文 → DeepSeek SSE 流式回答
+```
+
+## 主要特性
+
+- 只捕获系统播放声音，不采集麦克风
+- Paraformer 中文流式识别，支持 `partial` 实时替换与 `final` 稳定定稿
+- 无边框、置顶、可穿透的桌面字幕，可拖动和自由调整显示范围
+- 聊天式连续记录，手动查看历史时不会被新内容强制拉回底部
+- DeepSeek 上下文对话与 SSE 流式输出，连续语音片段自动合并后整体回答
+- 本地网页设置页，可调整字体、颜色、透明度、提示词、模型与触发时间
+- API Key 使用 Windows DPAPI 加密，仅保存在当前用户的本机目录
+- Overlay 与 ASR 服务相互独立，Overlay 退出不会影响语音识别服务
+
+这个服务只采集 Windows 当前播放设备的系统声音，不采集麦克风。WASAPI loopback 音频先下混为单声道，再通过有状态 SoXR 重采样为 16 kHz PCM，交给 Paraformer 中文流式模型，最后把中文增量文本推送到 WebSocket。
+
+## 安装与启动
+
+需要 Windows 10/11 和 64 位 Python 3.11。PowerShell 进入本目录：
+
+```powershell
+# NVIDIA 显卡（推荐）
+.\install.ps1 -Cuda
+
+# 或 CPU 版
+.\install.ps1
+
+.\start.ps1
+```
+
+首次启动会从 ModelScope 下载模型，需要联网等待几分钟。启动后打开 <http://127.0.0.1:8765> 查看实时字幕，WebSocket 地址是 `ws://127.0.0.1:8765/ws`。
+
+## 播放设备
+
+```powershell
+.\.venv\Scripts\python.exe -m system_audio_asr --list-devices
+.\start.ps1 -Speaker "扬声器 (Realtek"
+```
+
+默认用系统默认播放设备。如果音量条一直不动，先确认正在播放的应用输出到了同一个设备。如果音量很小而不触发识别，可降低门限：
+
+```powershell
+.\start.ps1 -SilenceDb -50
+```
+
+如果 ModelScope 下载较慢，也可以使用官方 Hugging Face 副本：
+
+```powershell
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+.\.venv\Scripts\python.exe -m system_audio_asr --model funasr/paraformer-zh-streaming --hub hf
+```
+
+## WebSocket 协议
+
+服务端只推送 UTF-8 JSON：
+
+```json
+{"type":"partial","segment_id":0,"text":"这是正在识别的"}
+{"type":"final","segment_id":0,"text":"这是已经定稿的一句话。"}
+{"type":"audio_level","dbfs":-23.4,"active":true}
+{"type":"status","state":"capturing","speaker":"扬声器 (...)"}
+{"type":"error","where":"wasapi","message":"..."}
+```
+
+同一 `segment_id` 的新 `partial` 应直接覆盖旧 partial；收到 `final` 后开始下一句。每条消息还包含递增的 `seq` 和 UTC `timestamp`。
+
+## 延迟和接口
+
+默认 Paraformer 块为 `[0, 8, 4]`，流式步长约 480 ms；实际总延迟还包含推理和播放端缓冲。连续静音 900 ms 后发送 `final`。
+
+```powershell
+.\.venv\Scripts\python.exe -m system_audio_asr --help
+Invoke-RestMethod http://127.0.0.1:8765/health
+Invoke-RestMethod http://127.0.0.1:8765/devices
+.\.venv\Scripts\python.exe -m pytest
+```
+
+```text
+WASAPI loopback（多声道 float32）
+  → 下混 + 有状态 SoXR
+  → 16 kHz / mono / float32 PCM
+  → Paraformer Streaming
+  → partial / final JSON WebSocket
+```
+
+## Windows 桌面字幕 Overlay
+
+Overlay 直接订阅现有 `ws://127.0.0.1:8765/ws`。正常模式只有类似桌面歌词的字幕文字，没有背景框；默认置顶、鼠标穿透且不抢焦点。最后一句字幕会一直保留，直到下一段识别结果替换。
+
+```powershell
+.\build_overlay.ps1       # 首次或源码更新后构建
+.\start_overlay.ps1       # 后台启动
+.\start_overlay.ps1 -Edit # 启动并编辑位置/宽度/字体
+.\start_overlay.ps1 -AISettings # 直接打开 AI 设置页
+```
+
+全局快捷键优先使用 `Ctrl+Alt+O`；若被其他软件占用，会自动回退为 `Ctrl+Shift+O`。字体、颜色、透明度和显示器可在设置页调整；字幕显示范围直接在桌面上拖动外框改变。配置保存在 `%LOCALAPPDATA%\WasapiParaformerOverlay\config.json`，托盘菜单可以预览、编辑或退出。
+
+字幕正文使用类似普通 AI 聊天界面的常规字重，不使用粗体标题式正文。设置页的字号为手动数字输入，支持 `12–96 px`，不再使用滑杆。
+
+老板键优先使用 `Ctrl+Alt+H`，冲突时自动回退为 `Ctrl+Shift+H`。按一次立即隐藏字幕，再按一次恢复；隐藏期间 ASR、WebSocket 和 AI 仍会继续工作。
+
+字幕未锁定时可直接按住拖拽；鼠标移入字幕区域会显示半透明外框，以及无边框的“重置 / 锁定 / 隐藏”三个图标。拖动四条边或四个角可像缩放图片一样改变显示范围，文字自动换行，框高自动决定可见行数。点击锁定后外框消失，移动和缩放禁用，字幕主体恢复鼠标穿透；再次点击闭锁按钮即可解锁。重置会清空聊天记录、历史 user/assistant 上下文、等待队列和当前 AI 输出，但保留 system/附加提示词、模型、API Key、外观与窗口几何。`×` 只隐藏字幕，可用老板键恢复；真正退出仅通过系统托盘菜单。位置、宽高与锁定状态都会持久化。设置窗口中的“恢复默认位置”仍只负责窗口几何。
+
+AI 设置页支持 DeepSeek API Key、模型、自动判断/总结/问答/解释/翻译模式、停顿触发时间和附加提示词。实际 AI 回答通过 SSE 流式返回并逐字更新 Overlay。API Key 使用 Windows DPAPI 按当前用户加密保存在 `%LOCALAPPDATA%\WasapiParaformerOverlay\deepseek.key`，不会写进 JSON、源码或运行日志。未设置 Key 时不会发送任何 API 请求。
+
+字幕采用左对齐连续聊天视图：每段 `final` 追加为一条“语音”消息，DeepSeek 紧随其后追加一条“AI”消息。SSE delta 在后台读取并立即进入打字机缓冲，Overlay 每 35 ms 只显示 1–2 个完整字符，形成正常 AI 聊天的逐字效果。后续语音进入队列，上一轮不会被清空；最近多轮语音与 AI 回复会作为上下文继续发送，实现连续对话。显示范围不足时自动滚动到最新消息。
+
+如果 AI 尚未开始显示回答，后续 `final` 会直接追加到上一条“语音”消息中，并取消后重新发起合并请求；不会额外生成一条“语音”记录。AI 已经开始显示文字后，后续语音才进入下一轮。AI 忙碌期间积累的连续片段会合并为一个 user turn，只生成一条整体回复。
+
+滚动行为采用聊天软件的“粘住底部”规则：停留在底部时自动跟随新内容；手动向上滚动后立即暂停自动跟随，AI 继续生成但不会把视图拉回底部；手动滚回最底部后恢复自动跟随。
+
+Overlay 在没有聊天内容、刚启动或重置上下文后不会消失，而是显示淡色 `等待语音…`。只有老板键会让整个 Overlay 完全隐藏；再次按老板键会恢复占位文字或最新聊天。
+
+## 隐私与使用说明
+
+- 语音识别默认在本机运行；模型首次使用时需要联网下载。
+- 只有启用 AI 且配置 DeepSeek API Key 后，定稿文字和必要的对话上下文才会发送给 DeepSeek。
+- 请在遵守适用法律、平台规则以及取得必要同意的前提下使用。AI 生成内容可能不准确，重要回答请自行核实。
+
+## 开发与测试
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\build_overlay.ps1
+```
+
+项目主体包括 Python/FastAPI/FunASR ASR 服务与独立的 C# WPF Overlay。欢迎提交 Issue 和 Pull Request。
+
+## License
+
+[MIT License](LICENSE)

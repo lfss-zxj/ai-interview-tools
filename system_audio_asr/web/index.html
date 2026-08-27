@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>系统声音实时字幕</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui,"Microsoft YaHei",sans-serif; }
+    body { margin: 0; min-height: 100vh; background: #0b1020; color: #eef2ff; }
+    main { width: min(900px,calc(100% - 32px)); margin: 48px auto; }
+    .top { display: flex; align-items: center; gap: 12px; color: #a5b4fc; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; }
+    .dot.on { background: #34d399; box-shadow: 0 0 16px #34d399; }
+    .meter { height: 6px; margin: 24px 0; background: #1e293b; border-radius: 9px; overflow: hidden; }
+    .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg,#38bdf8,#34d399); transition: width .1s; }
+    #partial { min-height: 3em; font-size: clamp(24px,4vw,42px); line-height: 1.55; }
+    #history { margin-top: 30px; color: #cbd5e1; font-size: 18px; line-height: 1.8; }
+    #history p { margin: 8px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="top"><span id="dot" class="dot"></span><span id="status">正在连接…</span></div>
+  <div style="margin-top:12px"><a href="/settings" style="color:#7dd3fc;text-decoration:none">字幕与 AI 设置</a></div>
+  <div class="meter"><i id="level"></i></div>
+  <section id="partial">播放一段中文声音…</section>
+  <section id="history"></section>
+</main>
+<script>
+const statusEl=document.querySelector('#status'),dot=document.querySelector('#dot');
+const level=document.querySelector('#level'),partial=document.querySelector('#partial');
+const history=document.querySelector('#history'); let retry=500;
+function connect(){
+  const scheme=location.protocol==='https:'?'wss':'ws';
+  const ws=new WebSocket(`${scheme}://${location.host}/ws`);
+  ws.onopen=()=>{statusEl.textContent='已连接，等待模型和音频';dot.classList.add('on');retry=500};
+  ws.onmessage=({data})=>{const m=JSON.parse(data);
+    if(m.type==='status') statusEl.textContent=m.state==='capturing'?`正在识别：${m.speaker}`:m.state;
+    if(m.type==='error') statusEl.textContent=`错误：${m.message}`;
+    if(m.type==='audio_level') level.style.width=`${Math.max(0,Math.min(100,(m.dbfs+60)*100/60))}%`;
+    if(m.type==='partial') partial.textContent=m.text;
+    if(m.type==='final'){const p=document.createElement('p');p.textContent=m.text;history.prepend(p);partial.textContent='…'}
+  };
+  ws.onclose=()=>{dot.classList.remove('on');statusEl.textContent='连接断开，正在重连…';setTimeout(connect,retry);retry=Math.min(5000,retry*1.5)};
+}
+connect();
+</script>
+</body>
+</html>
