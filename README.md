@@ -1,8 +1,18 @@
 # VoxRibbon（声幕）
 
-> 将电脑声音实时转为中文字幕，并由 AI 流式分析对话、即时生成面试回答建议的 Windows 智能面试助手。
+在远程面试中，共享屏幕往往意味着暴露你的所有隐私——浏览器标签、微信消息、甚至是你偷偷打开的“小抄”。
 
-VoxRibbon 通过 WASAPI Loopback 捕获电脑正在播放的声音，使用 Paraformer Streaming 进行低延迟中文语音识别，并把字幕呈现在不干扰操作的 Windows 桌面 Overlay 中。音频停顿后，可调用 DeepSeek 延续上下文并流式生成回答建议，适合线上面试、会议辅助、课程记录和视频字幕等场景。
+**VoxRibbon** 是一款专为 Windows 设计的开源桌面工具，它通过 **WASAPI Loopback** 捕获系统音频，利用本地 **Paraformer** 模型实现低延迟中文语音识别，并通过悬浮窗口（Overlay）实时显示字幕和 AI 生成的回答。
+
+## ✨ 核心特性
+
+- **🔒 极致隐私**：仅在本地运行 ASR 引擎，只有定稿后的文本才会发送给 AI。支持 `Ctrl+Alt+H` “老板键”一键隐藏悬浮窗，后台服务继续运行。
+- **🚀 本地化 ASR**：基于 FunASR/Paraformer Streaming，无需麦克风，直接捕获系统播放的声音，识别速度快，支持离线基础功能。
+- **💬 流式 AI 对话**：集成 DeepSeek API，支持 SSE 流式输出。AI 会根据语境自动合并语音片段，提供连续的面试辅助回答。
+- **🎨 高度可定制**：WPF 驱动的悬浮窗支持拖拽、缩放、透明度过渡。所有设置通过本地 Web 界面 (`http://127.0.0.1:8765`) 管理，无需重启。
+- **🛡️ 安全设计**：API Key 使用 Windows DPAPI 加密存储，设置页仅允许本机访问，日志不记录敏感信息。
+
+[NoTrack AI — https://notrack.ai/](https://notrack.ai/)
 
 ```text
 系统播放声音 → WASAPI Loopback → 16 kHz PCM → Paraformer Streaming
@@ -11,17 +21,6 @@ VoxRibbon 通过 WASAPI Loopback 捕获电脑正在播放的声音，使用 Para
        ↓
 连续对话上下文 → DeepSeek SSE 流式回答
 ```
-
-## 主要特性
-
-- 只捕获系统播放声音，不采集麦克风
-- Paraformer 中文流式识别，支持 `partial` 实时替换与 `final` 稳定定稿
-- 无边框、置顶、可穿透的桌面字幕，可拖动和自由调整显示范围
-- 聊天式连续记录，手动查看历史时不会被新内容强制拉回底部
-- DeepSeek 上下文对话与 SSE 流式输出，连续语音片段自动合并后整体回答
-- 本地网页设置页，可调整字体、颜色、透明度、提示词、模型与触发时间
-- API Key 使用 Windows DPAPI 加密，仅保存在当前用户的本机目录
-- Overlay 与 ASR 服务相互独立，Overlay 退出不会影响语音识别服务
 
 这个服务只采集 Windows 当前播放设备的系统声音，不采集麦克风。WASAPI loopback 音频先下混为单声道，再通过有状态 SoXR 重采样为 16 kHz PCM，交给 Paraformer 中文流式模型，最后把中文增量文本推送到 WebSocket。
 
