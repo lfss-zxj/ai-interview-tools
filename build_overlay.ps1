@@ -7,7 +7,10 @@ $CaptureSource = Join-Path $ProjectDir "overlay_cs\OverlayCapture.cs"
 $CaptureOutput = Join-Path $OutputDir "OverlayCapture.exe"
 $CompilerCandidates = @(
     "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-    "C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+    "C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe",
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe",
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
+    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe"
 )
 $Compiler = $CompilerCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $Compiler) { throw ".NET Framework C# 编译器不存在。请启用 Windows .NET Framework 4.x。" }
@@ -36,6 +39,8 @@ $References = @(
     "System.Drawing.dll", "System.Net.Http.dll", "System.Security.dll"
 )
 $ReferenceArguments = $References | ForEach-Object { "/reference:$(Find-FrameworkAssembly $_)" }
+Write-Host "C# 编译器：$Compiler" -ForegroundColor DarkGray
+Write-Host "引用程序集：$($ReferenceArguments -join '; ')" -ForegroundColor DarkGray
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 & $Compiler /nologo /target:winexe /platform:x64 /optimize+ /debug:pdbonly "/out:$Output" @ReferenceArguments $Source
