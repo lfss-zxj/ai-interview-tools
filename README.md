@@ -19,6 +19,142 @@
 
 [NoTrack AI — https://notrack.ai/](https://notrack.ai/)
 
+## 🚀 新手安装教程（Windows）
+
+不会编程也可以使用。整个过程只需要下载项目、安装 Python，然后复制几条命令。
+
+### 第 1 步：确认电脑系统
+
+VoxRibbon 目前只支持 **64 位 Windows 10/11**。建议至少准备 6 GB 可用磁盘空间。
+
+- 有 NVIDIA 显卡：后面选择 CUDA 版，识别速度更快。
+- 没有 NVIDIA 显卡：选择 CPU 版，也能使用，但识别速度会慢一些。
+- DeepSeek API Key 不是必需的；不填写也可以免费使用本地实时字幕。
+
+不知道自己有没有 NVIDIA 显卡时，按 `Ctrl + Shift + Esc` 打开任务管理器，在“性能 → GPU”中查看名称。
+
+### 第 2 步：安装 Python 3.11
+
+打开 PowerShell：按下 `Win + R`，输入 `powershell`，按回车，然后复制执行：
+
+```powershell
+winget install -e --id Python.Python.3.11
+```
+
+安装结束后，**关闭 PowerShell 并重新打开一个窗口**，执行：
+
+```powershell
+py -3.11 --version
+```
+
+如果看到类似 `Python 3.11.x`，说明安装成功。如果提示找不到 `winget`，请从 [Python 官网](https://www.python.org/downloads/release/python-3119/) 安装 64 位 Python 3.11，并在安装界面勾选 `Add Python to PATH`。
+
+### 第 3 步：下载 VoxRibbon
+
+不熟悉 Git 的用户直接点击：
+
+**[下载 VoxRibbon ZIP](https://github.com/lfss-zxj/ai-interview-tools/archive/refs/heads/main.zip)**
+
+下载完成后：
+
+1. 右键 ZIP，选择“全部解压缩”。
+2. 打开解压后的 `ai-interview-tools-main` 文件夹。
+3. 点击资源管理器顶部的地址栏，输入 `powershell`，按回车。
+4. 此时打开的蓝色窗口应位于项目目录，不需要再输入 `cd`。
+
+熟悉 Git 的用户也可以执行：
+
+```powershell
+git clone https://github.com/lfss-zxj/ai-interview-tools.git
+cd ai-interview-tools
+```
+
+### 第 4 步：允许当前窗口运行安装脚本
+
+复制执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+这个设置只对当前 PowerShell 窗口有效，不会永久修改系统策略。
+
+### 第 5 步：安装依赖
+
+有 NVIDIA 显卡时执行：
+
+```powershell
+.\install.ps1 -Cuda
+```
+
+没有 NVIDIA 显卡时执行：
+
+```powershell
+.\install.ps1 -Cpu
+```
+
+安装通常需要几分钟。CUDA 版 PyTorch 会安装在项目自己的 `.venv` 中，**不会重新安装显卡驱动，也不会修改系统 CUDA**。看到下面这句话才表示安装完成：
+
+```text
+安装和自检完成。运行 .\launch.ps1，首次启动会下载 Paraformer 模型。
+```
+
+如果中途出现红色错误，不要继续启动；先查看下方“常见问题”，或者提交 Issue 时附上错误内容。
+
+### 第 6 步：一键启动
+
+继续在同一个 PowerShell 窗口执行：
+
+```powershell
+.\launch.ps1
+```
+
+第一次启动会联网下载 Paraformer 模型，需要耐心等待。看到 `VoxRibbon 已就绪` 后，桌面会出现字幕区域。
+
+然后播放一段普通话视频或语音：
+
+1. 打开 <http://127.0.0.1:8765>，确认页面上的音量数值会变化。
+2. 电脑扬声器中出现中文声音后，桌面 Overlay 应显示实时字幕。
+3. 按 `Ctrl + Alt + O` 解锁并拖动字幕；调整完成后点击锁图标。
+4. 按 `Ctrl + Alt + H` 隐藏字幕，再按一次恢复。
+
+### 第 7 步：启用 AI 面试回答（可选）
+
+打开设置页：<http://127.0.0.1:8765/settings>
+
+填写自己的 DeepSeek API Key，选择模型和回答模式，点击“保存”并测试连接。VoxRibbon、本地 ASR 和桌面字幕完全免费；只有启用 DeepSeek 后产生的 API 调用由 DeepSeek 按实际用量收费。
+
+API Key 会使用 Windows DPAPI 加密保存在本机，不会写入项目源码或日志。
+
+### 以后怎么启动
+
+以后不需要重复安装。打开项目文件夹，在地址栏输入 `powershell`，然后执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\launch.ps1
+```
+
+### 新手常见问题
+
+| 现象 | 处理方法 |
+| --- | --- |
+| `无法将 py 识别为命令` | 重新安装 Python 3.11，勾选 `Add Python to PATH`，安装后重开 PowerShell。 |
+| `禁止运行脚本` | 先执行 `Set-ExecutionPolicy -Scope Process Bypass`。 |
+| 有 NVIDIA 显卡但显示 `cuda_available=False` | 确认执行的是 `.\install.ps1 -Cuda`；系统有 CUDA 不等于虚拟环境已有 CUDA 版 PyTorch。 |
+| 一直在下载模型 | 首次运行需要联网下载，请继续等待；网络慢时可参考 [完整部署指南](DEPLOYMENT.md)。 |
+| 页面显示正常但没有字幕 | 确认电脑正在播放中文声音，并检查播放软件是否使用了系统默认输出设备。 |
+| 字幕不见了 | 按一次 `Ctrl + Alt + H`，再按 `Ctrl + Alt + O`。 |
+| 端口 8765 被占用 | 执行 `.\launch.ps1 -Port 8876`，设置页相应改为 `http://127.0.0.1:8876/settings`。 |
+
+需要进一步排查时运行：
+
+```powershell
+.\verify_install.ps1
+```
+
+更详细的显卡、播放设备、模型下载和故障处理说明见 [Windows 完整部署指南](DEPLOYMENT.md)。
+
 ```text
 系统播放声音 → WASAPI Loopback → 16 kHz PCM → Paraformer Streaming
                                               ↓
@@ -28,25 +164,6 @@
 ```
 
 这个服务只采集 Windows 当前播放设备的系统声音，不采集麦克风。WASAPI loopback 音频先下混为单声道，再通过有状态 SoXR 重采样为 16 kHz PCM，交给 Paraformer 中文流式模型，最后把中文增量文本推送到 WebSocket。
-
-## 安装与启动
-
-需要 Windows 10/11 和 64 位 Python 3.11。PowerShell 进入本目录：
-
-```powershell
-# NVIDIA 显卡（推荐）
-.\install.ps1 -Cuda
-
-# 或 CPU 版
-.\install.ps1 -Cpu
-
-# 安装完成后一键启动 ASR 与 Overlay
-.\launch.ps1
-```
-
-首次启动会从 ModelScope 下载模型，需要联网等待几分钟。启动后打开 <http://127.0.0.1:8765> 查看实时字幕，WebSocket 地址是 `ws://127.0.0.1:8765/ws`。
-
-从 Python 安装、CUDA/CPU 选择到实际链路验收的说明，请查看 [Windows 完整部署指南](DEPLOYMENT.md)。安装后可运行 `.\verify_install.ps1` 执行依赖、测试、播放设备和 Overlay 编译自检。
 
 ## 播放设备
 
