@@ -620,7 +620,14 @@ namespace WasapiParaformerOverlay
 
         internal List<string> Finals { get { return new List<string>(finals); } }
         internal string Partial { get { return partial; } }
+        internal int PartialSegment { get { return partialSegment; } }
         internal bool HasText { get { return finals.Count > 0 || partial.Length > 0; } }
+
+        internal void DiscardPartial()
+        {
+            partial = "";
+            partialSegment = -1;
+        }
 
         internal void Clear()
         {
@@ -1360,6 +1367,7 @@ namespace WasapiParaformerOverlay
         private bool editMode;
         private bool preview;
         private bool bossHidden;
+        private int ignoredSpeechSegment = -1;
         internal bool IsClosing { get; private set; }
         private readonly LinkedList<SpeechBatch> aiQueue = new LinkedList<SpeechBatch>();
         private readonly List<ChatEntry> chatEntries = new List<ChatEntry>();
@@ -1525,7 +1533,7 @@ namespace WasapiParaformerOverlay
             Forms.ContextMenuStrip menu = new Forms.ContextMenuStrip();
             menu.Items.Add("编辑位置与样式  (Ctrl+Alt+O / Ctrl+Shift+O)", null, delegate { Dispatcher.BeginInvoke(new Action(ToggleEditMode)); });
             menu.Items.Add("显示字幕预览", null, delegate { Dispatcher.BeginInvoke(new Action(ShowPreview)); });
-            menu.Items.Add("隐藏/显示字幕  (Ctrl+Alt+H / Ctrl+Shift+H)", null, delegate { Dispatcher.BeginInvoke(new Action(ToggleBossVisibility)); });
+            menu.Items.Add("暂停接收并隐藏/恢复字幕  (Ctrl+Alt+H / Ctrl+Shift+H)", null, delegate { Dispatcher.BeginInvoke(new Action(ToggleBossVisibility)); });
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add("退出 Overlay", null, delegate { Dispatcher.BeginInvoke(new Action(RequestShutdown)); });
             tray.ContextMenuStrip = menu;
@@ -1723,6 +1731,22 @@ namespace WasapiParaformerOverlay
                 int segment = message.ContainsKey("segment_id")
                     ? Convert.ToInt32(message["segment_id"])
                     : -1;
+                if (bossHidden)
+                {
+                    if (type == "partial") ignoredSpeechSegment = segment;
+                    else if (type == "final" && ignoredSpeechSegment == segment)
+                        ignoredSpeechSegment = -1;
+                    AppLog.Write(string.Format(
+                        "speech ignored hidden=True type={0} segment={1}", type, segment));
+                    return;
+                }
+                if (ignoredSpeechSegment >= 0 && segment == ignoredSpeechSegment)
+                {
+                    if (type == "final") ignoredSpeechSegment = -1;
+                    AppLog.Write(string.Format(
+                        "speech ignored hidden_tail=True type={0} segment={1}", type, segment));
+                    return;
+                }
                 string loggedText = fullText;
                 if (loggedText.Length > 120) loggedText = loggedText.Substring(0, 120);
                 AppLog.Write(type + " text=" + loggedText);
@@ -1991,6 +2015,9 @@ namespace WasapiParaformerOverlay
             BeginAnimation(Window.OpacityProperty, null);
             if (bossHidden)
             {
+                if (subtitle.PartialSegment >= 0)
+                    ignoredSpeechSegment = subtitle.PartialSegment;
+                subtitle.DiscardPartial();
                 if (editMode) SetEditMode(false);
                 lockIndicator.Hide();
                 SetResizeFrame(false);
@@ -2001,7 +2028,9 @@ namespace WasapiParaformerOverlay
                 RefreshText();
                 Opacity = config.Opacity;
             }
-            AppLog.Write("boss_hidden=" + bossHidden);
+            AppLog.Write(string.Format(
+                "boss_hidden={0} speech_accepting={1} ignored_segment={2}",
+                bossHidden, !bossHidden, ignoredSpeechSegment));
         }
 
         internal void RequestShutdown()
