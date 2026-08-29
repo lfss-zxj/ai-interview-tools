@@ -1649,7 +1649,7 @@ namespace WasapiParaformerOverlay
                     geometrySaveTimer.Start();
                 }
             };
-            MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs args)
+            PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs args)
             {
                 if (editMode || !config.Locked)
                 {
@@ -1663,10 +1663,13 @@ namespace WasapiParaformerOverlay
                     }
                     else
                     {
-                        try { DragMove(); } catch { }
+                        AppLog.Write("drag_move begin");
+                        try { DragMove(); }
+                        catch (Exception error) { AppLog.Write("drag_move error=" + error.Message); }
                     }
                     RememberPosition();
                     SaveConfig();
+                    AppLog.Write(string.Format("drag_move end left={0:0} top={1:0}", Left, Top));
                 }
             };
             MouseMove += delegate(object sender, MouseEventArgs args)
@@ -2303,7 +2306,9 @@ namespace WasapiParaformerOverlay
             bool show = !bossHidden && (visible || config.FrameMode == "always");
             if (show)
             {
-                background.Background = Brushes.Transparent;
+                // Layered windows do not receive mouse input on fully transparent pixels.
+                // Alpha 1 is visually invisible but keeps the unlocked frame draggable.
+                background.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
                 byte alpha = (byte)Math.Round(config.FrameOpacity * 255);
                 background.BorderBrush = BrushFromHex(config.FrameColor, alpha);
             }

@@ -131,6 +131,31 @@ internal static class OverlayCapture
             Console.WriteLine(title.Substring(2) + " sent");
             return 0;
         }
+        if (title == "--drag-move")
+        {
+            IntPtr overlay = FindWindow((uint)processes[0].Id, "系统声音实时字幕 Overlay");
+            Rect before;
+            if (overlay == IntPtr.Zero || DwmGetWindowAttribute(
+                overlay, 9, out before, Marshal.SizeOf(typeof(Rect))) != 0) return 6;
+            int startX = (before.Left + before.Right) / 2;
+            int startY = (before.Top + before.Bottom) / 2;
+            SetCursorPos(startX, startY);
+            Thread.Sleep(150);
+            mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+            for (int step = 1; step <= 10; step++)
+            {
+                SetCursorPos(startX + step * 8, startY - step * 3);
+                Thread.Sleep(35);
+            }
+            mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+            Thread.Sleep(500);
+            Rect after;
+            if (DwmGetWindowAttribute(overlay, 9, out after, Marshal.SizeOf(typeof(Rect))) != 0) return 8;
+            Console.WriteLine(string.Format(
+                "drag move ({0},{1}) -> ({2},{3})",
+                before.Left, before.Top, after.Left, after.Top));
+            return before.Left != after.Left || before.Top != after.Top ? 0 : 9;
+        }
         if (title == "--drag-resize")
         {
             IntPtr overlay = FindWindow((uint)processes[0].Id, "系统声音实时字幕 Overlay");
