@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ctypes
+import os
+import sys
 import threading
 from collections.abc import Callable
 
@@ -58,8 +61,25 @@ class WasapiLoopbackCapture:
         self._stop.set()
 
     def run(self) -> None:
+        com_initialized = False
         try:
+            soundcard_was_loaded = "soundcard.mediafoundation" in sys.modules
             import soundcard as sc
+
+            # SoundCard initializes COM only when its backend module is first imported.
+            # A dynamically restarted capture thread reuses that module and must initialize
+            # COM for itself. Do not initialize before the first import: SoundCard treats
+            # the valid S_FALSE result from a second CoInitializeEx call as an error.
+            if os.name == "nt" and soundcard_was_loaded:
+                initialize = ctypes.windll.ole32.CoInitializeEx
+                initialize.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+                initialize.restype = ctypes.c_long
+                result = int(initialize(None, 0))
+                # S_OK and S_FALSE both require a matching CoUninitialize.
+                if result in {0, 1}:
+                    com_initialized = True
+                elif result != -2147417850:  # RPC_E_CHANGED_MODE: COM already initialized differently.
+                    raise OSError(result, "CoInitializeEx failed")
             import soxr
 
             speaker = _select_speaker(self.speaker_selector)
@@ -94,4 +114,6 @@ class WasapiLoopbackCapture:
         except BaseException as exc:
             if not self._stop.is_set():
                 self.on_error(exc)
-
+        finally:
+            if com_initialized:
+                ctypes.windll.ole32.CoUninitialize()
