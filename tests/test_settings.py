@@ -16,3 +16,8 @@ def test_font_size_accepts_manual_range() -> None:
     assert normalize_settings({"fontSize": 12})["fontSize"] == 12
     assert normalize_settings({"fontSize": 17})["fontSize"] == 17
     assert normalize_settings({"fontSize": 120})["fontSize"] == 96
+
+
+def test_translation_modes_are_preserved() -> None:
+    assert normalize_settings({"aiMode": "translate"})["aiMode"] == "translate"
+    assert normalize_settings({"aiMode": "translate_zh"})["aiMode"] == "translate_zh"

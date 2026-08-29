@@ -446,10 +446,12 @@ namespace WasapiParaformerOverlay
             else if (config.AiMode == "explain")
                 prompt = "请用简洁中文解释这段语音涉及的概念或意图，不要复述全文。";
             else if (config.AiMode == "translate")
-                prompt = "请将这段中文语音准确翻译为自然、简洁的英文，只输出译文。";
+                prompt = "请将这段中文转写准确翻译为自然、简洁的英文，只输出译文。";
+            else if (config.AiMode == "translate_zh")
+                prompt = "请将这段英文转写准确翻译为自然、通顺的简体中文，只输出中文译文，不要解释，不要附带原文。结合上下文处理代词、术语和残句。";
             else
-                prompt = "你是实时语音助手。若语音中包含明确问题，直接回答；否则用一句话总结或解释重点。回答简洁，不复述全文；转写可能有少量错误，请结合上下文理解。";
-            prompt = "这是连续的语音对话。请结合前几轮上下文理解当前消息，并先默默修正明显的同音字或识别错字。\n" + prompt;
+                prompt = "你是实时字幕助手。若内容中包含明确问题，直接回答；否则用一句话总结或解释重点。回答简洁，不复述全文；转写可能有少量错误，请结合上下文理解。";
+            prompt = "这是连续的转写内容。请结合前几轮上下文理解当前消息，并先默默修正明显的识别错误。\n" + prompt;
             if (!string.IsNullOrWhiteSpace(config.AiSystemPrompt))
                 prompt += "\n附加要求：" + config.AiSystemPrompt.Trim();
             return prompt;
@@ -465,7 +467,7 @@ namespace WasapiParaformerOverlay
             system["content"] = PromptForMode(config);
             Dictionary<string, object> user = new Dictionary<string, object>();
             user["role"] = "user";
-            user["content"] = "语音转写：\n" + transcript;
+            user["content"] = "转写文本：\n" + transcript;
             Dictionary<string, object> payload = new Dictionary<string, object>();
             payload["model"] = config.AiModel;
             payload["messages"] = new object[] { system, user };
@@ -515,7 +517,7 @@ namespace WasapiParaformerOverlay
                 Dictionary<string, object> message = new Dictionary<string, object>();
                 message["role"] = item.Role;
                 message["content"] = item.Role == "user"
-                    ? "语音转写：\n" + item.Text
+                    ? "转写文本：\n" + item.Text
                     : item.Text;
                 messages.Add(message);
             }
@@ -895,7 +897,7 @@ namespace WasapiParaformerOverlay
             lockedBox.Unchecked += delegate { if (!syncing) overlay.SetPositionLocked(false); };
             root.Children.Add(lockedBox);
 
-            TextBlock aiHint = MakeText("语音停顿后，将本轮 final 字幕发送给 DeepSeek。API Key 使用 Windows DPAPI 加密。", 12);
+            TextBlock aiHint = MakeText("字幕停顿后，将本轮 final 文本发送给 DeepSeek。API Key 使用 Windows DPAPI 加密。", 12);
             aiHint.TextWrapping = TextWrapping.Wrap;
             aiHint.Foreground = new SolidColorBrush(Color.FromRgb(147, 197, 253));
             aiHint.Margin = new Thickness(0, 0, 0, 10);
@@ -928,8 +930,9 @@ namespace WasapiParaformerOverlay
             aiModeBox.Items.Add("一句话总结");
             aiModeBox.Items.Add("回答问题");
             aiModeBox.Items.Add("解释内容");
-            aiModeBox.Items.Add("翻译为英文");
-            aiModeBox.Width = 125;
+            aiModeBox.Items.Add("中文翻译为英文");
+            aiModeBox.Items.Add("英文翻译为中文");
+            aiModeBox.Width = 160;
             aiModeBox.Margin = new Thickness(8, 0, 0, 0);
             aiOptions.Children.Add(aiModeBox);
             aiRoot.Children.Add(aiOptions);
@@ -1114,7 +1117,8 @@ namespace WasapiParaformerOverlay
             if (display == "一句话总结") return "summary";
             if (display == "回答问题") return "qa";
             if (display == "解释内容") return "explain";
-            if (display == "翻译为英文") return "translate";
+            if (display == "中文翻译为英文") return "translate";
+            if (display == "英文翻译为中文") return "translate_zh";
             return "auto";
         }
 
@@ -1123,7 +1127,8 @@ namespace WasapiParaformerOverlay
             if (key == "summary") return "一句话总结";
             if (key == "qa") return "回答问题";
             if (key == "explain") return "解释内容";
-            if (key == "translate") return "翻译为英文";
+            if (key == "translate") return "中文翻译为英文";
+            if (key == "translate_zh") return "英文翻译为中文";
             return "自动判断";
         }
 
@@ -1837,7 +1842,7 @@ namespace WasapiParaformerOverlay
             {
                 if (chatEntries.Count == 0 && subtitle.Partial.Length == 0)
                 {
-                    Run waiting = new Run("等待语音…");
+                    Run waiting = new Run("等待字幕…");
                     waiting.Foreground = new SolidColorBrush(Color.FromArgb(150, 175, 190, 208));
                     waiting.FontWeight = FontWeights.Normal;
                     text.Inlines.Add(waiting);
@@ -1846,11 +1851,14 @@ namespace WasapiParaformerOverlay
                 {
                     ChatEntry entry = chatEntries[index];
                     bool user = entry.Role == "user";
-                    Run label = new Run(user ? "语音  " : "AI    ");
-                    label.Foreground = new SolidColorBrush(
-                        user ? Color.FromRgb(159, 183, 212) : Color.FromRgb(116, 232, 255));
-                    label.FontWeight = FontWeights.SemiBold;
-                    text.Inlines.Add(label);
+                    if (!user)
+                    {
+                        bool translated = config.AiMode == "translate" || config.AiMode == "translate_zh";
+                        Run label = new Run(translated ? "译文  " : "AI    ");
+                        label.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
+                        label.FontWeight = FontWeights.SemiBold;
+                        text.Inlines.Add(label);
+                    }
                     Run content = new Run(entry.Text + (entry.Streaming ? " ▍" : ""));
                     content.Foreground = user
                         ? BrushFromHex(config.TextColor, 245)
@@ -1862,10 +1870,6 @@ namespace WasapiParaformerOverlay
                 }
                 if (subtitle.Partial.Length > 0)
                 {
-                    Run partialLabel = new Run("语音  ");
-                    partialLabel.Foreground = new SolidColorBrush(Color.FromRgb(159, 183, 212));
-                    partialLabel.FontWeight = FontWeights.SemiBold;
-                    text.Inlines.Add(partialLabel);
                     Run partialRun = new Run(subtitle.Partial + " ▍");
                     partialRun.Foreground = BrushFromHex(config.TextColor, 255);
                     partialRun.FontWeight = FontWeights.Normal;

@@ -136,7 +136,7 @@ def normalize_settings(value: dict[str, Any]) -> dict[str, Any]:
     result["locked"] = bool(result["locked"])
     if result["aiModel"] not in {"deepseek-v4-flash", "deepseek-v4-pro"}:
         result["aiModel"] = "deepseek-v4-flash"
-    if result["aiMode"] not in {"auto", "summary", "qa", "explain", "translate"}:
+    if result["aiMode"] not in {"auto", "summary", "qa", "explain", "translate", "translate_zh"}:
         result["aiMode"] = "auto"
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(result["textColor"])):
         result["textColor"] = "#FFFFFF"
