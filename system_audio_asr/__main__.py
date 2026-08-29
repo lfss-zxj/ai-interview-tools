@@ -19,6 +19,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model", default="paraformer-zh-streaming")
     result.add_argument("--hub", choices=("ms", "hf"), help="模型仓库：ModelScope 或 Hugging Face")
     result.add_argument("--device", default="auto", help="auto、cpu 或 cuda:0")
+    result.add_argument("--language", choices=("zh", "en"), help="识别语言；默认读取设置页")
     result.add_argument("--list-devices", action="store_true")
     return result
 
@@ -30,6 +31,13 @@ def main() -> None:
 
         print(json.dumps(list_speakers(), ensure_ascii=False, indent=2))
         return
+
+    if args.language:
+        language = args.language
+    else:
+        from .settings import load_settings
+
+        language = load_settings().get("asrLanguage", "zh")
 
     config = AppConfig(
         host=args.host,
@@ -43,6 +51,7 @@ def main() -> None:
         model=args.model,
         hub=args.hub,
         device=args.device,
+        language=language,
     )
     config.validate()
 

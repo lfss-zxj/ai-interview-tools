@@ -4,6 +4,7 @@ import asyncio
 import json
 import threading
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,8 +74,21 @@ class EventHub:
 def create_app(config: AppConfig) -> FastAPI:
     config.validate()
     hub = EventHub()
-    engine = TranscriptionEngine(config, hub.publish)
+    runtime_config = config
+    engine = TranscriptionEngine(runtime_config, hub.publish)
+    engine_restart_lock = asyncio.Lock()
     translator = LocalEnglishChineseTranslator()
+
+    async def restart_engine(language: str) -> None:
+        nonlocal engine, runtime_config
+        async with engine_restart_lock:
+            if engine.config.language == language:
+                return
+            hub.publish({"type": "status", "state": "switching_language", "language": language})
+            await asyncio.to_thread(engine.stop)
+            runtime_config = replace(runtime_config, language=language)
+            engine = TranscriptionEngine(runtime_config, hub.publish)
+            engine.start()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -116,9 +130,17 @@ def create_app(config: AppConfig) -> FastAPI:
     async def put_settings(request: Request, payload: dict) -> dict:
         require_local(request)
         saved = await asyncio.to_thread(update_from_web, payload)
+        restarted = saved.get("asrLanguage", "zh") != engine.config.language
+        if restarted:
+            await restart_engine(saved.get("asrLanguage", "zh"))
         if saved.get("liveTranslateEnabled"):
             asyncio.create_task(asyncio.to_thread(translator.warmup))
-        return {"ok": True, "settings": saved, "apiKeySet": public_settings()["apiKeySet"]}
+        return {
+            "ok": True,
+            "settings": saved,
+            "apiKeySet": public_settings()["apiKeySet"],
+            "asrRestarted": restarted,
+        }
 
     @app.get("/api/translate/status")
     async def translation_status(request: Request) -> dict:
@@ -161,6 +183,7 @@ def create_app(config: AppConfig) -> FastAPI:
             "status": hub.latest_status,
             "error": hub.latest_error,
             "clients": len(hub.clients),
+            "language": engine.config.language,
         }
 
     @app.get("/devices")

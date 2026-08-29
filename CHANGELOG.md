@@ -5,7 +5,9 @@
 ## [Unreleased]
 
 - 增加不依赖 DeepSeek 的本地英文 → 中文 partial/final 实时翻译。
+- 增加 Faster-Whisper 英文专用 ASR，并支持在设置页动态切换中英文识别引擎。
 - 修复英文流式识别结果在单词边界处被错误拼接的问题。
+- 增加字幕外框显示模式、颜色和透明度设置。
 - 增加一键启动、安装自检和完整 Windows 部署文档。
 - 固定兼容的 PyTorch/TorchAudio 版本，并对原生命令执行结果进行检查。
 - 增加 Windows GitHub Actions、贡献指南、安全策略和 Issue 模板。

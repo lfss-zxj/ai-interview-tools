@@ -52,6 +52,9 @@
       <div class="row"><label for="opacity">文字透明度</label><input id="opacity" type="range" min="45" max="98" step="1"><output id="opacityOut"></output></div>
       <div class="row two"><label for="fontFamily">字体</label><select id="fontFamily"><option>Microsoft YaHei UI</option><option>Microsoft YaHei</option><option>Segoe UI</option><option>SimHei</option><option>KaiTi</option><option>Arial</option></select></div>
       <div class="row two"><label for="textColor">文字颜色</label><input id="textColor" type="color"></div>
+      <div class="row two"><label for="frameMode">字幕外框</label><select id="frameMode"><option value="hover">仅鼠标悬停时显示</option><option value="always">始终显示</option></select></div>
+      <div class="row two"><label for="frameColor">外框颜色</label><input id="frameColor" type="color"></div>
+      <div class="row"><label for="frameOpacity">外框透明度</label><input id="frameOpacity" type="range" min="0" max="100" step="1"><output id="frameOpacityOut"></output></div>
       <div class="row two"><label for="screenName">显示器</label><select id="screenName"></select></div>
       <label class="switch"><input id="locked" type="checkbox">锁定字幕位置（锁定后字幕主体鼠标穿透）</label>
       <p class="hint">老板键：<strong>Ctrl+Alt+H</strong>。若被其他软件占用，自动回退为 <strong>Ctrl+Shift+H</strong>；按一次隐藏，再按一次恢复。</p>
@@ -65,8 +68,9 @@
 
     <section class="card wide">
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><h2>本地实时翻译</h2><span id="translationBadge" class="badge">未加载</span></div>
+      <div class="row two"><label for="asrLanguage">识别语言</label><select id="asrLanguage"><option value="zh">中文 · Paraformer Streaming</option><option value="en">英文 · Faster-Whisper</option></select></div>
       <label class="switch"><input id="liveTranslateEnabled" type="checkbox">启用英文 → 中文实时翻译（本地模型，不使用 DeepSeek）</label>
-      <p class="hint">每次 partial 更新都会在本机翻译，final 到达后稳定定稿。首次启用会下载约 300 MB 的 OPUS-MT 模型；之后可离线使用。原英文直接显示，中文结果标为“译文”。</p>
+      <p class="hint">英文模式使用约 78 MB 的 Faster-Whisper 英文模型；每次 partial 再由本机 OPUS-MT 翻译，final 到达后稳定定稿。模型下载后可离线使用。原英文直接显示，中文结果标为“译文”。</p>
       <div style="display:flex;justify-content:flex-end"><button id="warmTranslation" type="button">下载并预热翻译模型</button></div>
     </section>
 
@@ -85,30 +89,32 @@
   <div class="actions"><span id="status">正在加载设置…</span><button id="save" class="primary" type="button">保存并应用</button></div>
 </main>
 <script>
-const ids=['fontSize','opacity','fontFamily','textColor','screenName','locked','liveTranslateEnabled','aiEnabled','aiModel','aiMode','aiSilenceSeconds','aiSystemPrompt'];
+const ids=['fontSize','opacity','fontFamily','textColor','frameMode','frameColor','frameOpacity','screenName','locked','asrLanguage','liveTranslateEnabled','aiEnabled','aiModel','aiMode','aiSilenceSeconds','aiSystemPrompt'];
 const $=id=>document.getElementById(id); let loaded=null, clearRequested=false;
 function showStatus(text,error=false){$('status').textContent=text;$('status').style.color=error?'#fca5a5':'#9fb0c7'}
 function updatePreview(){
-  $('opacityOut').value=$('opacity').value+'%'; $('aiSilenceOut').value=Number($('aiSilenceSeconds').value).toFixed(1)+' s';
+  $('opacityOut').value=$('opacity').value+'%'; $('frameOpacityOut').value=$('frameOpacity').value+'%'; $('aiSilenceOut').value=Number($('aiSilenceSeconds').value).toFixed(1)+' s';
   const p=$('previewText'); p.style.fontFamily=$('fontFamily').value; p.style.fontSize=Math.min(72,Number($('fontSize').value))+'px'; p.style.fontWeight='400'; p.style.color=$('textColor').value; p.style.opacity=Number($('opacity').value)/100;
+  const preview=$('previewText').parentElement; const frameAlpha=Number($('frameOpacity').value)/100; preview.style.border=`1px solid color-mix(in srgb, ${$('frameColor').value} ${Math.round(frameAlpha*100)}%, transparent)`;
 }
 async function load(){
   try{const data=await fetch('/api/settings').then(r=>{if(!r.ok)throw Error(r.status);return r.json()}); loaded=data.settings;
-    for(const id of ids){const el=$(id),v=loaded[id]; if(el.type==='checkbox')el.checked=Boolean(v); else if(id==='opacity')el.value=Math.round(Number(v)*100); else if(v!==undefined)el.value=v}
+    for(const id of ids){const el=$(id),v=loaded[id]; if(el.type==='checkbox')el.checked=Boolean(v); else if(id==='opacity'||id==='frameOpacity')el.value=Math.round(Number(v)*100); else if(v!==undefined)el.value=v}
     $('screenName').innerHTML=''; const monitors=data.monitors.length?data.monitors:[loaded.screenName||'默认显示器']; for(const name of monitors){const o=document.createElement('option');o.value=name;o.textContent=name;$('screenName').append(o)} $('screenName').value=loaded.screenName||monitors[0];
     $('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key'; $('keyBadge').className='badge '+(data.apiKeySet?'ok':''); await refreshTranslationStatus(); updatePreview(); showStatus('设置已加载');
   }catch(e){showStatus('加载失败：'+e.message,true)}
 }
-function collect(){return {fontSize:Number($('fontSize').value),opacity:Number($('opacity').value)/100,fontFamily:$('fontFamily').value,textColor:$('textColor').value,screenName:$('screenName').value,locked:$('locked').checked,liveTranslateEnabled:$('liveTranslateEnabled').checked,aiEnabled:$('aiEnabled').checked,aiModel:$('aiModel').value,aiMode:$('aiMode').value,aiSilenceSeconds:Number($('aiSilenceSeconds').value),aiSystemPrompt:$('aiSystemPrompt').value}}
+function collect(){return {fontSize:Number($('fontSize').value),opacity:Number($('opacity').value)/100,fontFamily:$('fontFamily').value,textColor:$('textColor').value,frameMode:$('frameMode').value,frameColor:$('frameColor').value,frameOpacity:Number($('frameOpacity').value)/100,screenName:$('screenName').value,locked:$('locked').checked,asrLanguage:$('asrLanguage').value,liveTranslateEnabled:$('liveTranslateEnabled').checked,aiEnabled:$('aiEnabled').checked,aiModel:$('aiModel').value,aiMode:$('aiMode').value,aiSilenceSeconds:Number($('aiSilenceSeconds').value),aiSystemPrompt:$('aiSystemPrompt').value}}
 async function refreshTranslationStatus(){try{const s=await fetch('/api/translate/status').then(r=>r.json());$('translationBadge').textContent=s.loaded?`已加载 · ${s.device||'本机'}${s.lastLatencyMs?` · ${s.lastLatencyMs} ms`:''}`:'尚未加载';$('translationBadge').className='badge '+(s.loaded?'ok':'')}catch{$('translationBadge').textContent='状态未知'}}
 async function save(){
-  $('save').disabled=true; showStatus('正在保存…'); try{const payload={settings:collect(),clearApiKey:clearRequested}; if($('apiKey').value.trim())payload.apiKey=$('apiKey').value.trim(); const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await r.json(); if(!r.ok)throw Error(data.detail||r.status); clearRequested=false;$('apiKey').value='';$('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key';$('keyBadge').className='badge '+(data.apiKeySet?'ok':'');showStatus('已保存，Overlay 将在约 1 秒内应用');return true}catch(e){showStatus('保存失败：'+e.message,true);return false}finally{$('save').disabled=false}
+  $('save').disabled=true; showStatus('正在保存…'); try{const payload={settings:collect(),clearApiKey:clearRequested}; if($('apiKey').value.trim())payload.apiKey=$('apiKey').value.trim(); const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await r.json(); if(!r.ok)throw Error(data.detail||r.status); clearRequested=false;$('apiKey').value='';$('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key';$('keyBadge').className='badge '+(data.apiKeySet?'ok':'');showStatus(data.asrRestarted?'已保存，正在切换识别模型…':'已保存，Overlay 将在约 1 秒内应用');return true}catch(e){showStatus('保存失败：'+e.message,true);return false}finally{$('save').disabled=false}
 }
 $('save').onclick=save; $('testAi').onclick=async()=>{if(!await save())return;$('testAi').disabled=true;showStatus('正在测试 DeepSeek…');try{const r=await fetch('/api/settings/test-deepseek',{method:'POST'}),data=await r.json();if(!r.ok)throw Error(data.detail||r.status);showStatus('连接成功：'+data.message)}catch(e){showStatus('连接失败：'+e.message,true)}finally{$('testAi').disabled=false}};
 $('warmTranslation').onclick=async()=>{$('warmTranslation').disabled=true;showStatus('正在下载并预热本地翻译模型，首次可能需要几分钟…');try{const r=await fetch('/api/translate/warmup',{method:'POST'}),data=await r.json();if(!r.ok)throw Error(data.detail||r.status);await refreshTranslationStatus();showStatus(`翻译模型已就绪：${data.translation}（${data.latencyMs} ms）`)}catch(e){showStatus('翻译模型加载失败：'+e.message,true)}finally{$('warmTranslation').disabled=false}};
 $('toggleKey').onclick=()=>{const input=$('apiKey');input.type=input.type==='password'?'text':'password';$('toggleKey').textContent=input.type==='password'?'显示':'隐藏'};
 $('clearKey').onclick=()=>{if(confirm('清除本机已保存的 DeepSeek API Key？')){clearRequested=true;$('apiKey').value='';$('keyBadge').textContent='保存后清除';$('keyBadge').className='badge'}};
-for(const id of ['fontSize','opacity','fontFamily','textColor','aiSilenceSeconds'])$(id).addEventListener('input',updatePreview); load();
+for(const id of ['fontSize','opacity','fontFamily','textColor','frameColor','frameOpacity','aiSilenceSeconds'])$(id).addEventListener('input',updatePreview);
+$('liveTranslateEnabled').addEventListener('change',()=>{if($('liveTranslateEnabled').checked)$('asrLanguage').value='en'}); load();
 </script>
 </body>
 </html>

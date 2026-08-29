@@ -255,9 +255,13 @@ namespace WasapiParaformerOverlay
         internal int FadeDelayMs = 1800;
         internal string FontFamilyName = "Microsoft YaHei UI";
         internal string TextColor = "#FFFFFF";
+        internal string FrameMode = "hover";
+        internal string FrameColor = "#7DBEFF";
+        internal double FrameOpacity = 0.69;
         internal bool Locked = false;
         internal string ScreenName = "";
         internal string WebSocketUrl = "ws://127.0.0.1:8765/ws";
+        internal string AsrLanguage = "zh";
         internal bool LiveTranslateEnabled = false;
         internal bool AiEnabled = false;
         internal string AiModel = "deepseek-v4-flash";
@@ -282,13 +286,17 @@ namespace WasapiParaformerOverlay
             FontSize = Math.Max(12, Math.Min(96, FontSize));
             MaxLines = Math.Max(1, Math.Min(10, MaxLines));
             Opacity = Math.Max(0.45, Math.Min(0.98, Opacity));
+            FrameOpacity = Math.Max(0, Math.Min(1, FrameOpacity));
             FadeDelayMs = Math.Max(1000, Math.Min(5000, FadeDelayMs));
             AiSilenceSeconds = Math.Max(0.5, Math.Min(8.0, AiSilenceSeconds));
             if (string.IsNullOrWhiteSpace(FontFamilyName)) FontFamilyName = "Microsoft YaHei UI";
             if (string.IsNullOrWhiteSpace(TextColor)) TextColor = "#FFFFFF";
+            if (FrameMode != "always") FrameMode = "hover";
+            if (string.IsNullOrWhiteSpace(FrameColor)) FrameColor = "#7DBEFF";
             if (string.IsNullOrWhiteSpace(AiModel)) AiModel = "deepseek-v4-flash";
             if (string.IsNullOrWhiteSpace(AiMode)) AiMode = "auto";
             if (string.IsNullOrWhiteSpace(AiBaseUrl)) AiBaseUrl = "https://api.deepseek.com";
+            if (AsrLanguage != "en") AsrLanguage = "zh";
         }
 
         internal static OverlayConfig Load()
@@ -310,9 +318,13 @@ namespace WasapiParaformerOverlay
                 if (data.ContainsKey("fadeDelayMs")) result.FadeDelayMs = Convert.ToInt32(data["fadeDelayMs"]);
                 if (data.ContainsKey("fontFamily")) result.FontFamilyName = Convert.ToString(data["fontFamily"]);
                 if (data.ContainsKey("textColor")) result.TextColor = Convert.ToString(data["textColor"]);
+                if (data.ContainsKey("frameMode")) result.FrameMode = Convert.ToString(data["frameMode"]);
+                if (data.ContainsKey("frameColor")) result.FrameColor = Convert.ToString(data["frameColor"]);
+                if (data.ContainsKey("frameOpacity")) result.FrameOpacity = Convert.ToDouble(data["frameOpacity"]);
                 if (data.ContainsKey("locked")) result.Locked = Convert.ToBoolean(data["locked"]);
                 if (data.ContainsKey("screenName")) result.ScreenName = Convert.ToString(data["screenName"]);
                 if (data.ContainsKey("webSocketUrl")) result.WebSocketUrl = Convert.ToString(data["webSocketUrl"]);
+                if (data.ContainsKey("asrLanguage")) result.AsrLanguage = Convert.ToString(data["asrLanguage"]);
                 if (data.ContainsKey("liveTranslateEnabled")) result.LiveTranslateEnabled = Convert.ToBoolean(data["liveTranslateEnabled"]);
                 if (data.ContainsKey("aiEnabled")) result.AiEnabled = Convert.ToBoolean(data["aiEnabled"]);
                 if (data.ContainsKey("aiModel")) result.AiModel = Convert.ToString(data["aiModel"]);
@@ -340,9 +352,13 @@ namespace WasapiParaformerOverlay
             data["fadeDelayMs"] = FadeDelayMs;
             data["fontFamily"] = FontFamilyName;
             data["textColor"] = TextColor;
+            data["frameMode"] = FrameMode;
+            data["frameColor"] = FrameColor;
+            data["frameOpacity"] = FrameOpacity;
             data["locked"] = Locked;
             data["screenName"] = ScreenName;
             data["webSocketUrl"] = WebSocketUrl;
+            data["asrLanguage"] = AsrLanguage;
             data["liveTranslateEnabled"] = LiveTranslateEnabled;
             data["aiEnabled"] = AiEnabled;
             data["aiModel"] = AiModel;
@@ -371,9 +387,13 @@ namespace WasapiParaformerOverlay
             FadeDelayMs = other.FadeDelayMs;
             FontFamilyName = other.FontFamilyName;
             TextColor = other.TextColor;
+            FrameMode = other.FrameMode;
+            FrameColor = other.FrameColor;
+            FrameOpacity = other.FrameOpacity;
             Locked = other.Locked;
             ScreenName = other.ScreenName;
             WebSocketUrl = other.WebSocketUrl;
+            AsrLanguage = other.AsrLanguage;
             LiveTranslateEnabled = other.LiveTranslateEnabled;
             AiEnabled = other.AiEnabled;
             AiModel = other.AiModel;
@@ -950,7 +970,7 @@ namespace WasapiParaformerOverlay
             aiHint.Margin = new Thickness(0, 0, 0, 10);
             aiRoot.Children.Add(aiHint);
             liveTranslateBox = new CheckBox();
-            liveTranslateBox.Content = "本地英文 → 中文实时翻译（不使用 DeepSeek）";
+            liveTranslateBox.Content = "本地英文 → 中文实时翻译（英文模型下次启动生效）";
             liveTranslateBox.Foreground = new SolidColorBrush(Color.FromRgb(134, 247, 168));
             liveTranslateBox.Margin = new Thickness(0, 0, 0, 10);
             aiRoot.Children.Add(liveTranslateBox);
@@ -2131,6 +2151,7 @@ namespace WasapiParaformerOverlay
                 RefreshText();
                 background.Background = Brushes.Transparent;
                 background.BorderBrush = Brushes.Transparent;
+                SetResizeFrame(false);
                 RememberPosition();
                 SaveConfig();
                 NativeMethods.SetNormalInteraction(hwnd, config.Locked);
@@ -2279,10 +2300,12 @@ namespace WasapiParaformerOverlay
         private void SetResizeFrame(bool visible)
         {
             if (editMode) return;
-            if (visible)
+            bool show = !bossHidden && (visible || config.FrameMode == "always");
+            if (show)
             {
-                background.Background = new SolidColorBrush(Color.FromArgb(12, 96, 165, 250));
-                background.BorderBrush = new SolidColorBrush(Color.FromArgb(175, 125, 190, 255));
+                background.Background = Brushes.Transparent;
+                byte alpha = (byte)Math.Round(config.FrameOpacity * 255);
+                background.BorderBrush = BrushFromHex(config.FrameColor, alpha);
             }
             else
             {
@@ -2354,6 +2377,7 @@ namespace WasapiParaformerOverlay
         {
             if (config.LiveTranslateEnabled == enabled) return;
             config.LiveTranslateEnabled = enabled;
+            if (enabled) config.AsrLanguage = "en";
             if (!enabled) CancelLocalTranslation(true);
             RefreshText();
             SaveConfig();
@@ -2853,6 +2877,7 @@ namespace WasapiParaformerOverlay
                     streamingAiEntry = null;
                 }
                 ApplySize(true);
+                SetResizeFrame(false);
                 if (oldScreen != config.ScreenName)
                 {
                     Forms.Screen target = FindConfiguredScreen();

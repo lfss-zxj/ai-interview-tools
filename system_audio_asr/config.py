@@ -17,6 +17,7 @@ class AppConfig:
     model: str = "paraformer-zh-streaming"
     hub: str | None = None
     device: str = "auto"
+    language: str = "zh"
     chunk_size: tuple[int, int, int] = (0, 8, 4)
     encoder_look_back: int = 4
     decoder_look_back: int = 1
@@ -36,3 +37,5 @@ class AppConfig:
             raise ValueError("preroll_ms 不能为负数")
         if len(self.chunk_size) != 3 or self.chunk_size[1] <= 0:
             raise ValueError("chunk_size 必须是三个整数，且中间值大于 0")
+        if self.language not in {"zh", "en"}:
+            raise ValueError("language 必须是 zh 或 en")

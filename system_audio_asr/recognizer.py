@@ -52,6 +52,9 @@ class TranscriptionEngine:
 
     def _run(self) -> None:
         try:
+            if self.config.language == "en":
+                self._run_english()
+                return
             os.environ.setdefault("MODELSCOPE_DOWNLOAD_PARALLEL_WORKERS", "1")
             os.environ.setdefault("MODELSCOPE_DOWNLOAD_PART_SIZE_MB", "64")
             if self.config.hub == "hf":
@@ -133,6 +136,110 @@ class TranscriptionEngine:
             if self._capture:
                 self._capture.stop()
             self.publish({"type": "status", "state": "stopped"})
+
+    def _run_english(self) -> None:
+        os.environ.setdefault("MODELSCOPE_DOWNLOAD_PARALLEL_WORKERS", "4")
+        from faster_whisper import WhisperModel
+        from modelscope import snapshot_download
+
+        requested = choose_device(self.config.device)
+        device = "cuda" if requested.startswith("cuda") else "cpu"
+        device_index = int(requested.split(":", 1)[1]) if ":" in requested else 0
+        compute_type = "float16" if device == "cuda" else "int8"
+        model_name = "pengzhendong/faster-whisper-tiny.en"
+        self.publish(
+            {
+                "type": "status",
+                "state": "loading_model",
+                "model": model_name,
+                "device": requested,
+                "language": "en",
+            }
+        )
+        configured_dir = os.environ.get("VOXRIBBON_ENGLISH_MODEL_DIR", "").strip()
+        app_root = os.environ.get(
+            "LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")
+        )
+        persistent_dir = os.path.join(
+            app_root, "VoxRibbon", "models", "faster-whisper-tiny.en"
+        )
+        if configured_dir and os.path.isfile(os.path.join(configured_dir, "model.bin")):
+            model_dir = configured_dir
+        elif os.path.isfile(os.path.join(persistent_dir, "model.bin")):
+            model_dir = persistent_dir
+        else:
+            model_dir = snapshot_download(model_name, local_dir=persistent_dir)
+        model = WhisperModel(
+            model_dir,
+            device=device,
+            device_index=device_index,
+            compute_type=compute_type,
+        )
+        self.publish(
+            {"type": "status", "state": "model_ready", "device": requested, "language": "en"}
+        )
+
+        segmenter = SpeechSegmenter(
+            self.config.target_rate,
+            self.config.model_stride_samples,
+            self.config.silence_db,
+            self.config.endpoint_silence_ms,
+            self.config.preroll_ms,
+        )
+        self._capture = WasapiLoopbackCapture(
+            self.config.speaker,
+            self.config.capture_rate,
+            self.config.target_rate,
+            self.config.capture_block_ms,
+            lambda audio: self._on_audio(segmenter, audio),
+            self.publish,
+            self._on_capture_error,
+        )
+        self._capture_thread = threading.Thread(
+            target=self._capture.run, name="wasapi-loopback", daemon=True
+        )
+        self._capture_thread.start()
+
+        utterance = np.empty(0, dtype=np.float32)
+        last_text = ""
+        while not self._stop.is_set():
+            try:
+                packet = self._packets.get(timeout=0.2)
+            except queue.Empty:
+                if self._capture_thread and not self._capture_thread.is_alive():
+                    break
+                continue
+            utterance = np.concatenate((utterance, packet.samples))
+            # Whisper accepts at most 30 seconds. Keep the newest context for unusually long turns.
+            if utterance.size > self.config.target_rate * 30:
+                utterance = utterance[-self.config.target_rate * 30 :]
+            if utterance.size < self.config.target_rate and not packet.is_final:
+                continue
+            segments, _info = model.transcribe(
+                utterance,
+                language="en",
+                beam_size=1,
+                best_of=1,
+                temperature=0.0,
+                vad_filter=False,
+                condition_on_previous_text=False,
+                without_timestamps=True,
+            )
+            text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
+            if text and (text != last_text or packet.is_final):
+                self.publish(
+                    {
+                        "type": "final" if packet.is_final else "partial",
+                        "segment_id": self._segment_id,
+                        "text": text,
+                        "language": "en",
+                    }
+                )
+                last_text = text
+            if packet.is_final:
+                utterance = np.empty(0, dtype=np.float32)
+                last_text = ""
+                self._segment_id += 1
 
     def _on_audio(self, segmenter: SpeechSegmenter, audio: np.ndarray) -> None:
         level, packets = segmenter.feed(audio)

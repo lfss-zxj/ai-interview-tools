@@ -91,7 +91,7 @@ API Key 使用 Windows DPAPI 按当前登录用户加密，保存在：
 
 ## 5.1 本地英文 → 中文实时翻译（可选）
 
-打开设置页，勾选“启用英文 → 中文实时翻译”，再点击“下载并预热翻译模型”。首次会下载 OPUS-MT 英中模型；翻译在本机完成，不使用 DeepSeek、不需要 API Key、不产生 API 费用。NVIDIA 环境默认使用 CUDA，CPU 环境自动回退到 CPU。
+打开设置页，把识别语言改为“英文 · Faster-Whisper”，勾选“启用英文 → 中文实时翻译”，再点击“下载并预热翻译模型”。识别引擎会在后台切换，不需要退出 Overlay。首次会下载约 78 MB 的英文 ASR 和约 300 MB 的 OPUS-MT 英中模型；识别与翻译均在本机完成，不使用 DeepSeek、不需要 API Key、不产生 API 费用。NVIDIA 环境默认使用 CUDA，CPU 环境自动回退到 CPU。
 
 ## 6. 验证实际链路
 

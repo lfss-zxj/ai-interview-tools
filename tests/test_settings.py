@@ -26,3 +26,15 @@ def test_deepseek_translation_mode_is_preserved() -> None:
 def test_live_translation_flag_is_normalized() -> None:
     assert normalize_settings({"liveTranslateEnabled": True})["liveTranslateEnabled"] is True
     assert normalize_settings({"liveTranslateEnabled": False})["liveTranslateEnabled"] is False
+
+
+def test_asr_language_is_normalized() -> None:
+    assert normalize_settings({"asrLanguage": "en"})["asrLanguage"] == "en"
+    assert normalize_settings({"asrLanguage": "invalid"})["asrLanguage"] == "zh"
+
+
+def test_frame_appearance_is_normalized() -> None:
+    assert normalize_settings({"frameMode": "always"})["frameMode"] == "always"
+    assert normalize_settings({"frameMode": "bad"})["frameMode"] == "hover"
+    assert normalize_settings({"frameOpacity": 2})["frameOpacity"] == 1.0
+    assert normalize_settings({"frameColor": "invalid"})["frameColor"] == "#7DBEFF"
