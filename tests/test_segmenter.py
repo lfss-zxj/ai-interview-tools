@@ -31,6 +31,8 @@ def test_level_and_text_merge() -> None:
     assert -20.1 < dbfs(np.full(10, 0.1, dtype=np.float32)) < -19.9
     assert merge_stream_text("你好世界", "世界和平") == "你好世界和平"
     assert merge_stream_text("你好", "你好世界") == "你好世界"
+    assert merge_stream_text("would you", " in the") == "would you in the"
+    assert merge_stream_text("tell me", "about") == "tell me about"
 
 
 def test_zero_preroll_starts_without_error() -> None:

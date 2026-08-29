@@ -101,6 +101,7 @@ class SpeechSegmenter:
 
 def merge_stream_text(previous: str, incoming: str) -> str:
     """Handle both incremental-token and cumulative-text FunASR versions."""
+    had_leading_space = bool(incoming) and incoming[0].isspace()
     incoming = incoming.strip()
     if not incoming:
         return previous
@@ -111,4 +112,12 @@ def merge_stream_text(previous: str, incoming: str) -> str:
     for size in range(min(len(previous), len(incoming)), 0, -1):
         if previous[-size:] == incoming[:size]:
             return previous + incoming[size:]
-    return previous + incoming
+    ascii_word_boundary = (
+        bool(previous)
+        and previous[-1].isascii()
+        and previous[-1].isalnum()
+        and incoming[0].isascii()
+        and incoming[0].isalnum()
+    )
+    separator = " " if previous and (had_leading_space or ascii_word_boundary) else ""
+    return previous + separator + incoming

@@ -18,6 +18,11 @@ def test_font_size_accepts_manual_range() -> None:
     assert normalize_settings({"fontSize": 120})["fontSize"] == 96
 
 
-def test_translation_modes_are_preserved() -> None:
+def test_deepseek_translation_mode_is_preserved() -> None:
     assert normalize_settings({"aiMode": "translate"})["aiMode"] == "translate"
-    assert normalize_settings({"aiMode": "translate_zh"})["aiMode"] == "translate_zh"
+    assert normalize_settings({"aiMode": "translate_zh"})["aiMode"] == "auto"
+
+
+def test_live_translation_flag_is_normalized() -> None:
+    assert normalize_settings({"liveTranslateEnabled": True})["liveTranslateEnabled"] is True
+    assert normalize_settings({"liveTranslateEnabled": False})["liveTranslateEnabled"] is False

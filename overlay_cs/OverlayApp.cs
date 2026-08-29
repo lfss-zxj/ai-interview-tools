@@ -258,6 +258,7 @@ namespace WasapiParaformerOverlay
         internal bool Locked = false;
         internal string ScreenName = "";
         internal string WebSocketUrl = "ws://127.0.0.1:8765/ws";
+        internal bool LiveTranslateEnabled = false;
         internal bool AiEnabled = false;
         internal string AiModel = "deepseek-v4-flash";
         internal string AiMode = "auto";
@@ -312,6 +313,7 @@ namespace WasapiParaformerOverlay
                 if (data.ContainsKey("locked")) result.Locked = Convert.ToBoolean(data["locked"]);
                 if (data.ContainsKey("screenName")) result.ScreenName = Convert.ToString(data["screenName"]);
                 if (data.ContainsKey("webSocketUrl")) result.WebSocketUrl = Convert.ToString(data["webSocketUrl"]);
+                if (data.ContainsKey("liveTranslateEnabled")) result.LiveTranslateEnabled = Convert.ToBoolean(data["liveTranslateEnabled"]);
                 if (data.ContainsKey("aiEnabled")) result.AiEnabled = Convert.ToBoolean(data["aiEnabled"]);
                 if (data.ContainsKey("aiModel")) result.AiModel = Convert.ToString(data["aiModel"]);
                 if (data.ContainsKey("aiMode")) result.AiMode = Convert.ToString(data["aiMode"]);
@@ -341,6 +343,7 @@ namespace WasapiParaformerOverlay
             data["locked"] = Locked;
             data["screenName"] = ScreenName;
             data["webSocketUrl"] = WebSocketUrl;
+            data["liveTranslateEnabled"] = LiveTranslateEnabled;
             data["aiEnabled"] = AiEnabled;
             data["aiModel"] = AiModel;
             data["aiMode"] = AiMode;
@@ -371,6 +374,7 @@ namespace WasapiParaformerOverlay
             Locked = other.Locked;
             ScreenName = other.ScreenName;
             WebSocketUrl = other.WebSocketUrl;
+            LiveTranslateEnabled = other.LiveTranslateEnabled;
             AiEnabled = other.AiEnabled;
             AiModel = other.AiModel;
             AiMode = other.AiMode;
@@ -447,8 +451,6 @@ namespace WasapiParaformerOverlay
                 prompt = "请用简洁中文解释这段语音涉及的概念或意图，不要复述全文。";
             else if (config.AiMode == "translate")
                 prompt = "请将这段中文转写准确翻译为自然、简洁的英文，只输出译文。";
-            else if (config.AiMode == "translate_zh")
-                prompt = "请将这段英文转写准确翻译为自然、通顺的简体中文，只输出中文译文，不要解释，不要附带原文。结合上下文处理代词、术语和残句。";
             else
                 prompt = "你是实时字幕助手。若内容中包含明确问题，直接回答；否则用一句话总结或解释重点。回答简洁，不复述全文；转写可能有少量错误，请结合上下文理解。";
             prompt = "这是连续的转写内容。请结合前几轮上下文理解当前消息，并先默默修正明显的识别错误。\n" + prompt;
@@ -576,6 +578,50 @@ namespace WasapiParaformerOverlay
                     string result = accumulated.ToString().Trim();
                     if (result.Length == 0) throw new InvalidOperationException("DeepSeek 流式返回了空内容");
                     return result;
+                }
+            }
+        }
+    }
+
+    internal static class LocalTranslationClient
+    {
+        private static readonly HttpClient Client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(120)
+        };
+
+        private static string Endpoint(string webSocketUrl)
+        {
+            Uri socket = new Uri(webSocketUrl);
+            UriBuilder builder = new UriBuilder(socket);
+            builder.Scheme = socket.Scheme == "wss" ? "https" : "http";
+            builder.Path = "/api/translate";
+            builder.Query = "";
+            return builder.Uri.ToString();
+        }
+
+        internal static async Task<string> TranslateAsync(
+            string webSocketUrl, string source, CancellationToken token)
+        {
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            Dictionary<string, object> payload = new Dictionary<string, object>();
+            payload["text"] = source;
+            using (HttpRequestMessage request = new HttpRequestMessage(
+                HttpMethod.Post, Endpoint(webSocketUrl)))
+            {
+                request.Content = new StringContent(
+                    serializer.Serialize(payload), Encoding.UTF8, "application/json");
+                using (HttpResponseMessage response = await Client.SendAsync(request, token).ConfigureAwait(false))
+                {
+                    string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                        throw new InvalidOperationException(
+                            "本地翻译 HTTP " + (int)response.StatusCode + ": " + body);
+                    Dictionary<string, object> result =
+                        serializer.Deserialize<Dictionary<string, object>>(body);
+                    return result.ContainsKey("translation")
+                        ? Convert.ToString(result["translation"]).Trim()
+                        : "";
                 }
             }
         }
@@ -774,6 +820,7 @@ namespace WasapiParaformerOverlay
         private readonly ComboBox fontBox;
         private readonly ComboBox colorBox;
         private readonly CheckBox lockedBox;
+        private readonly CheckBox liveTranslateBox;
         private readonly CheckBox aiEnabledBox;
         private readonly PasswordBox apiKeyBox;
         private readonly ComboBox aiModelBox;
@@ -818,7 +865,7 @@ namespace WasapiParaformerOverlay
             StackPanel aiRoot = new StackPanel();
             aiRoot.Margin = new Thickness(8, 12, 8, 8);
             TabItem aiTab = new TabItem();
-            aiTab.Header = "AI 助手";
+            aiTab.Header = "翻译 / AI";
             aiTab.Content = aiRoot;
             tabs.Items.Add(aiTab);
             shell.Children.Add(tabs);
@@ -902,6 +949,11 @@ namespace WasapiParaformerOverlay
             aiHint.Foreground = new SolidColorBrush(Color.FromRgb(147, 197, 253));
             aiHint.Margin = new Thickness(0, 0, 0, 10);
             aiRoot.Children.Add(aiHint);
+            liveTranslateBox = new CheckBox();
+            liveTranslateBox.Content = "本地英文 → 中文实时翻译（不使用 DeepSeek）";
+            liveTranslateBox.Foreground = new SolidColorBrush(Color.FromRgb(134, 247, 168));
+            liveTranslateBox.Margin = new Thickness(0, 0, 0, 10);
+            aiRoot.Children.Add(liveTranslateBox);
             aiEnabledBox = new CheckBox();
             aiEnabledBox.Content = "启用 AI 助手";
             aiEnabledBox.Foreground = Brushes.White;
@@ -931,7 +983,6 @@ namespace WasapiParaformerOverlay
             aiModeBox.Items.Add("回答问题");
             aiModeBox.Items.Add("解释内容");
             aiModeBox.Items.Add("中文翻译为英文");
-            aiModeBox.Items.Add("英文翻译为中文");
             aiModeBox.Width = 160;
             aiModeBox.Margin = new Thickness(8, 0, 0, 0);
             aiOptions.Children.Add(aiModeBox);
@@ -1118,7 +1169,6 @@ namespace WasapiParaformerOverlay
             if (display == "回答问题") return "qa";
             if (display == "解释内容") return "explain";
             if (display == "中文翻译为英文") return "translate";
-            if (display == "英文翻译为中文") return "translate_zh";
             return "auto";
         }
 
@@ -1128,7 +1178,6 @@ namespace WasapiParaformerOverlay
             if (key == "qa") return "回答问题";
             if (key == "explain") return "解释内容";
             if (key == "translate") return "中文翻译为英文";
-            if (key == "translate_zh") return "英文翻译为中文";
             return "自动判断";
         }
 
@@ -1137,6 +1186,7 @@ namespace WasapiParaformerOverlay
             string model = aiModelBox.SelectedItem == null ? "deepseek-v4-flash" : Convert.ToString(aiModelBox.SelectedItem);
             string mode = aiModeBox.SelectedItem == null ? "auto" : ModeKey(Convert.ToString(aiModeBox.SelectedItem));
             SecretStore.SaveApiKey(apiKeyBox.Password);
+            overlay.SetLiveTranslationEnabled(liveTranslateBox.IsChecked == true);
             overlay.ApplyAiSettings(
                 aiEnabledBox.IsChecked == true,
                 model,
@@ -1172,6 +1222,7 @@ namespace WasapiParaformerOverlay
             if (fontBox.SelectedItem == null) fontBox.SelectedItem = "Microsoft YaHei UI";
             colorBox.SelectedItem = ColorName(config.TextColor);
             lockedBox.IsChecked = config.Locked;
+            liveTranslateBox.IsChecked = config.LiveTranslateEnabled;
             screenBox.Items.Clear();
             foreach (Forms.Screen screen in Forms.Screen.AllScreens)
                 screenBox.Items.Add(screen.DeviceName);
@@ -1406,6 +1457,10 @@ namespace WasapiParaformerOverlay
         private bool followLatest = true;
         private bool internalScrollChange;
         private bool rebuildingText;
+        private string partialTranslation = "";
+        private int partialTranslationSegment = -1;
+        private int translationVersion;
+        private CancellationTokenSource translationCancellation;
 
         internal OverlayWindow(OverlayConfig config)
         {
@@ -1755,6 +1810,8 @@ namespace WasapiParaformerOverlay
                 string loggedText = fullText;
                 if (loggedText.Length > 120) loggedText = loggedText.Substring(0, 120);
                 AppLog.Write(type + " text=" + loggedText);
+                if (config.LiveTranslateEnabled && ContainsEnglishText(fullText))
+                    ScheduleLocalTranslation(fullText, segment, type == "final");
                 bool changed = subtitle.Apply(message);
                 if (type == "partial" && !aiBusy && aiQueue.Count > 0)
                 {
@@ -1853,7 +1910,7 @@ namespace WasapiParaformerOverlay
                     bool user = entry.Role == "user";
                     if (!user)
                     {
-                        bool translated = config.AiMode == "translate" || config.AiMode == "translate_zh";
+                        bool translated = entry.Role == "translation";
                         Run label = new Run(translated ? "译文  " : "AI    ");
                         label.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
                         label.FontWeight = FontWeights.SemiBold;
@@ -1874,6 +1931,19 @@ namespace WasapiParaformerOverlay
                     partialRun.Foreground = BrushFromHex(config.TextColor, 255);
                     partialRun.FontWeight = FontWeights.Normal;
                     text.Inlines.Add(partialRun);
+                    if (partialTranslation.Length > 0
+                        && partialTranslationSegment == subtitle.PartialSegment)
+                    {
+                        text.Inlines.Add(new LineBreak());
+                        Run translatedLabel = new Run("译文  ");
+                        translatedLabel.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
+                        translatedLabel.FontWeight = FontWeights.SemiBold;
+                        text.Inlines.Add(translatedLabel);
+                        Run translatedPartial = new Run(partialTranslation + " ▍");
+                        translatedPartial.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
+                        translatedPartial.FontWeight = FontWeights.Normal;
+                        text.Inlines.Add(translatedPartial);
+                    }
                 }
             }
             rebuildingText = false;
@@ -1894,6 +1964,103 @@ namespace WasapiParaformerOverlay
         private void TrimChatEntries()
         {
             while (chatEntries.Count > 30) chatEntries.RemoveAt(0);
+        }
+
+        private static bool ContainsEnglishText(string value)
+        {
+            int letters = 0;
+            foreach (char item in value ?? "")
+            {
+                if ((item >= 'A' && item <= 'Z') || (item >= 'a' && item <= 'z'))
+                {
+                    letters++;
+                    if (letters >= 2) return true;
+                }
+            }
+            return false;
+        }
+
+        private void CancelLocalTranslation(bool clearPartial)
+        {
+            translationVersion++;
+            CancellationTokenSource cancellation = translationCancellation;
+            translationCancellation = null;
+            if (cancellation != null)
+            {
+                try { cancellation.Cancel(); } catch { }
+                cancellation.Dispose();
+            }
+            if (clearPartial)
+            {
+                partialTranslation = "";
+                partialTranslationSegment = -1;
+            }
+        }
+
+        private async void ScheduleLocalTranslation(string source, int segment, bool isFinal)
+        {
+            CancelLocalTranslation(false);
+            int version = translationVersion;
+            CancellationTokenSource cancellation = new CancellationTokenSource();
+            translationCancellation = cancellation;
+            if (isFinal)
+            {
+                partialTranslation = "";
+                partialTranslationSegment = -1;
+            }
+            try
+            {
+                if (!isFinal) await Task.Delay(100, cancellation.Token);
+                string translated = await LocalTranslationClient.TranslateAsync(
+                    config.WebSocketUrl, source, cancellation.Token);
+                if (cancellation.IsCancellationRequested || version != translationVersion
+                    || !config.LiveTranslateEnabled || string.IsNullOrWhiteSpace(translated)) return;
+                if (isFinal)
+                {
+                    for (int index = chatEntries.Count - 1; index >= 0; index--)
+                    {
+                        if (chatEntries[index].Role == "translation"
+                            && chatEntries[index].SegmentId == segment)
+                            chatEntries.RemoveAt(index);
+                    }
+                    ChatEntry translatedEntry = new ChatEntry
+                    {
+                        Role = "translation",
+                        Text = translated,
+                        Streaming = false,
+                        SegmentId = segment
+                    };
+                    int sourceIndex = chatEntries.FindLastIndex(delegate(ChatEntry entry)
+                    {
+                        return entry.Role == "user" && entry.SegmentId == segment;
+                    });
+                    if (sourceIndex >= 0) chatEntries.Insert(sourceIndex + 1, translatedEntry);
+                    else chatEntries.Add(translatedEntry);
+                    TrimChatEntries();
+                }
+                else
+                {
+                    partialTranslation = translated;
+                    partialTranslationSegment = segment;
+                }
+                RefreshText();
+                ShowForSpeech();
+                AppLog.Write(string.Format(
+                    "local translation final={0} segment={1} source_chars={2} target_chars={3}",
+                    isFinal, segment, source.Length, translated.Length));
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error)
+            {
+                if (version == translationVersion)
+                    AppLog.Write("local translation error=" + error.Message);
+            }
+            finally
+            {
+                if (translationCancellation == cancellation)
+                    translationCancellation = null;
+                cancellation.Dispose();
+            }
         }
 
         private void ShowForSpeech()
@@ -1987,6 +2154,7 @@ namespace WasapiParaformerOverlay
 
         internal void ResetConversation()
         {
+            CancelLocalTranslation(true);
             aiTimer.Stop();
             CancelAiRequest();
             aiQueue.Clear();
@@ -2019,6 +2187,7 @@ namespace WasapiParaformerOverlay
             BeginAnimation(Window.OpacityProperty, null);
             if (bossHidden)
             {
+                CancelLocalTranslation(true);
                 if (subtitle.PartialSegment >= 0)
                     ignoredSpeechSegment = subtitle.PartialSegment;
                 subtitle.DiscardPartial();
@@ -2179,6 +2348,16 @@ namespace WasapiParaformerOverlay
             ApplySize(true);
             PositionSettings();
             SaveConfig();
+        }
+
+        internal void SetLiveTranslationEnabled(bool enabled)
+        {
+            if (config.LiveTranslateEnabled == enabled) return;
+            config.LiveTranslateEnabled = enabled;
+            if (!enabled) CancelLocalTranslation(true);
+            RefreshText();
+            SaveConfig();
+            AppLog.Write("live_translate_enabled=" + enabled);
         }
 
         internal void ApplyAiSettings(
@@ -2652,11 +2831,14 @@ namespace WasapiParaformerOverlay
                 configLastWrite = stamp;
                 OverlayConfig fresh = OverlayConfig.Load();
                 string oldScreen = config.ScreenName;
+                bool oldLiveTranslate = config.LiveTranslateEnabled;
                 config.ApplyFrom(fresh);
                 if (!editMode && hwnd != IntPtr.Zero)
                     NativeMethods.SetNormalInteraction(hwnd, config.Locked);
                 lockIndicator.UpdateState(config.Locked);
                 aiTimer.Interval = TimeSpan.FromSeconds(config.AiSilenceSeconds);
+                if (oldLiveTranslate && !config.LiveTranslateEnabled)
+                    CancelLocalTranslation(true);
                 if (!config.AiEnabled)
                 {
                     aiTimer.Stop();
@@ -2684,7 +2866,7 @@ namespace WasapiParaformerOverlay
                 }
                 if (settings.IsVisible) settings.Sync(config);
                 AppLog.Write(string.Format(
-                    "config reloaded font={0} size={1} color={2} width={3} height={4} opacity={5:0.00} applied_opacity={6:0.00} locked={7} click_through={8} ai={9}",
+                    "config reloaded font={0} size={1} color={2} width={3} height={4} opacity={5:0.00} applied_opacity={6:0.00} locked={7} click_through={8} ai={9} live_translate={10}",
                     config.FontFamilyName,
                     config.FontSize,
                     config.TextColor,
@@ -2694,7 +2876,8 @@ namespace WasapiParaformerOverlay
                     Opacity,
                     config.Locked,
                     (NativeMethods.GetExtendedStyle(hwnd) & NativeMethods.WS_EX_TRANSPARENT) != 0,
-                    config.AiEnabled));
+                    config.AiEnabled,
+                    config.LiveTranslateEnabled));
             }
             catch (Exception error)
             {
@@ -2728,6 +2911,7 @@ namespace WasapiParaformerOverlay
             geometrySaveTimer.Stop();
             configTimer.Stop();
             aiTimer.Stop();
+            CancelLocalTranslation(true);
             CancelAiRequest();
             subscriber.Dispose();
             if (hwnd != IntPtr.Zero)

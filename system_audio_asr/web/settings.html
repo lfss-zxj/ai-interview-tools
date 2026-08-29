@@ -64,12 +64,19 @@
     </section>
 
     <section class="card wide">
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><h2>本地实时翻译</h2><span id="translationBadge" class="badge">未加载</span></div>
+      <label class="switch"><input id="liveTranslateEnabled" type="checkbox">启用英文 → 中文实时翻译（本地模型，不使用 DeepSeek）</label>
+      <p class="hint">每次 partial 更新都会在本机翻译，final 到达后稳定定稿。首次启用会下载约 300 MB 的 OPUS-MT 模型；之后可离线使用。原英文直接显示，中文结果标为“译文”。</p>
+      <div style="display:flex;justify-content:flex-end"><button id="warmTranslation" type="button">下载并预热翻译模型</button></div>
+    </section>
+
+    <section class="card wide">
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:center"><h2>DeepSeek AI 助手</h2><span id="keyBadge" class="badge">检查中</span></div>
       <label class="switch"><input id="aiEnabled" type="checkbox">启用 AI 助手：字幕停顿后处理本轮 final 文本</label>
       <p class="hint">API Key 使用 Windows DPAPI 按当前 Windows 用户加密；设置 API 不会返回已保存 Key 的明文。每段 final 与 AI 回复会连续追加成聊天记录；SSE 内容经过打字机缓冲，每次显示 1–2 个字，并携带最近多轮上下文。</p>
       <div class="row two"><label for="apiKey">DeepSeek API Key</label><div style="display:flex;gap:8px"><input id="apiKey" type="password" autocomplete="off" placeholder="留空表示不修改已保存的 Key"><button id="toggleKey" type="button">显示</button><button id="clearKey" class="danger" type="button">清除</button></div></div>
       <div class="row two"><label for="aiModel">模型</label><select id="aiModel"><option value="deepseek-v4-flash">deepseek-v4-flash（低延迟）</option><option value="deepseek-v4-pro">deepseek-v4-pro（质量优先）</option></select></div>
-      <div class="row two"><label for="aiMode">处理模式</label><select id="aiMode"><option value="auto">自动判断：问题则回答，否则总结</option><option value="summary">一句话总结</option><option value="qa">回答问题</option><option value="explain">解释内容</option><option value="translate">中文翻译为英文</option><option value="translate_zh">英文翻译为中文</option></select></div>
+      <div class="row two"><label for="aiMode">处理模式</label><select id="aiMode"><option value="auto">自动判断：问题则回答，否则总结</option><option value="summary">一句话总结</option><option value="qa">回答问题</option><option value="explain">解释内容</option><option value="translate">中文翻译为英文</option></select></div>
       <div class="row"><label for="aiSilenceSeconds">final 后等待</label><input id="aiSilenceSeconds" type="range" min="0.5" max="8" step="0.1"><output id="aiSilenceOut"></output></div>
       <div class="row two"><label for="aiSystemPrompt">附加提示词</label><textarea id="aiSystemPrompt" placeholder="可选，例如：回答控制在 50 字以内；专业术语保留英文。"></textarea></div>
       <div style="display:flex;justify-content:flex-end"><button id="testAi" type="button">测试 DeepSeek 连接</button></div>
@@ -78,7 +85,7 @@
   <div class="actions"><span id="status">正在加载设置…</span><button id="save" class="primary" type="button">保存并应用</button></div>
 </main>
 <script>
-const ids=['fontSize','opacity','fontFamily','textColor','screenName','locked','aiEnabled','aiModel','aiMode','aiSilenceSeconds','aiSystemPrompt'];
+const ids=['fontSize','opacity','fontFamily','textColor','screenName','locked','liveTranslateEnabled','aiEnabled','aiModel','aiMode','aiSilenceSeconds','aiSystemPrompt'];
 const $=id=>document.getElementById(id); let loaded=null, clearRequested=false;
 function showStatus(text,error=false){$('status').textContent=text;$('status').style.color=error?'#fca5a5':'#9fb0c7'}
 function updatePreview(){
@@ -89,14 +96,16 @@ async function load(){
   try{const data=await fetch('/api/settings').then(r=>{if(!r.ok)throw Error(r.status);return r.json()}); loaded=data.settings;
     for(const id of ids){const el=$(id),v=loaded[id]; if(el.type==='checkbox')el.checked=Boolean(v); else if(id==='opacity')el.value=Math.round(Number(v)*100); else if(v!==undefined)el.value=v}
     $('screenName').innerHTML=''; const monitors=data.monitors.length?data.monitors:[loaded.screenName||'默认显示器']; for(const name of monitors){const o=document.createElement('option');o.value=name;o.textContent=name;$('screenName').append(o)} $('screenName').value=loaded.screenName||monitors[0];
-    $('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key'; $('keyBadge').className='badge '+(data.apiKeySet?'ok':''); updatePreview(); showStatus('设置已加载');
+    $('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key'; $('keyBadge').className='badge '+(data.apiKeySet?'ok':''); await refreshTranslationStatus(); updatePreview(); showStatus('设置已加载');
   }catch(e){showStatus('加载失败：'+e.message,true)}
 }
-function collect(){return {fontSize:Number($('fontSize').value),opacity:Number($('opacity').value)/100,fontFamily:$('fontFamily').value,textColor:$('textColor').value,screenName:$('screenName').value,locked:$('locked').checked,aiEnabled:$('aiEnabled').checked,aiModel:$('aiModel').value,aiMode:$('aiMode').value,aiSilenceSeconds:Number($('aiSilenceSeconds').value),aiSystemPrompt:$('aiSystemPrompt').value}}
+function collect(){return {fontSize:Number($('fontSize').value),opacity:Number($('opacity').value)/100,fontFamily:$('fontFamily').value,textColor:$('textColor').value,screenName:$('screenName').value,locked:$('locked').checked,liveTranslateEnabled:$('liveTranslateEnabled').checked,aiEnabled:$('aiEnabled').checked,aiModel:$('aiModel').value,aiMode:$('aiMode').value,aiSilenceSeconds:Number($('aiSilenceSeconds').value),aiSystemPrompt:$('aiSystemPrompt').value}}
+async function refreshTranslationStatus(){try{const s=await fetch('/api/translate/status').then(r=>r.json());$('translationBadge').textContent=s.loaded?`已加载 · ${s.device||'本机'}${s.lastLatencyMs?` · ${s.lastLatencyMs} ms`:''}`:'尚未加载';$('translationBadge').className='badge '+(s.loaded?'ok':'')}catch{$('translationBadge').textContent='状态未知'}}
 async function save(){
   $('save').disabled=true; showStatus('正在保存…'); try{const payload={settings:collect(),clearApiKey:clearRequested}; if($('apiKey').value.trim())payload.apiKey=$('apiKey').value.trim(); const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await r.json(); if(!r.ok)throw Error(data.detail||r.status); clearRequested=false;$('apiKey').value='';$('keyBadge').textContent=data.apiKeySet?'API Key 已加密保存':'尚未设置 API Key';$('keyBadge').className='badge '+(data.apiKeySet?'ok':'');showStatus('已保存，Overlay 将在约 1 秒内应用');return true}catch(e){showStatus('保存失败：'+e.message,true);return false}finally{$('save').disabled=false}
 }
 $('save').onclick=save; $('testAi').onclick=async()=>{if(!await save())return;$('testAi').disabled=true;showStatus('正在测试 DeepSeek…');try{const r=await fetch('/api/settings/test-deepseek',{method:'POST'}),data=await r.json();if(!r.ok)throw Error(data.detail||r.status);showStatus('连接成功：'+data.message)}catch(e){showStatus('连接失败：'+e.message,true)}finally{$('testAi').disabled=false}};
+$('warmTranslation').onclick=async()=>{$('warmTranslation').disabled=true;showStatus('正在下载并预热本地翻译模型，首次可能需要几分钟…');try{const r=await fetch('/api/translate/warmup',{method:'POST'}),data=await r.json();if(!r.ok)throw Error(data.detail||r.status);await refreshTranslationStatus();showStatus(`翻译模型已就绪：${data.translation}（${data.latencyMs} ms）`)}catch(e){showStatus('翻译模型加载失败：'+e.message,true)}finally{$('warmTranslation').disabled=false}};
 $('toggleKey').onclick=()=>{const input=$('apiKey');input.type=input.type==='password'?'text':'password';$('toggleKey').textContent=input.type==='password'?'显示':'隐藏'};
 $('clearKey').onclick=()=>{if(confirm('清除本机已保存的 DeepSeek API Key？')){clearRequested=true;$('apiKey').value='';$('keyBadge').textContent='保存后清除';$('keyBadge').className='badge'}};
 for(const id of ['fontSize','opacity','fontFamily','textColor','aiSilenceSeconds'])$(id).addEventListener('input',updatePreview); load();

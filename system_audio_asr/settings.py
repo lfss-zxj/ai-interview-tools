@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "locked": False,
     "screenName": "",
     "webSocketUrl": "ws://127.0.0.1:8765/ws",
+    "liveTranslateEnabled": False,
     "aiEnabled": False,
     "aiModel": "deepseek-v4-flash",
     "aiMode": "auto",
@@ -133,10 +134,11 @@ def normalize_settings(value: dict[str, Any]) -> dict[str, Any]:
     result["opacity"] = max(0.45, min(0.98, float(result["opacity"])))
     result["aiSilenceSeconds"] = max(0.5, min(8.0, float(result["aiSilenceSeconds"])))
     result["aiEnabled"] = bool(result["aiEnabled"])
+    result["liveTranslateEnabled"] = bool(result["liveTranslateEnabled"])
     result["locked"] = bool(result["locked"])
     if result["aiModel"] not in {"deepseek-v4-flash", "deepseek-v4-pro"}:
         result["aiModel"] = "deepseek-v4-flash"
-    if result["aiMode"] not in {"auto", "summary", "qa", "explain", "translate", "translate_zh"}:
+    if result["aiMode"] not in {"auto", "summary", "qa", "explain", "translate"}:
         result["aiMode"] = "auto"
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(result["textColor"])):
         result["textColor"] = "#FFFFFF"

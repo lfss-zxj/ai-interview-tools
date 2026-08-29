@@ -14,6 +14,7 @@ from .capture import list_speakers
 from .config import AppConfig
 from .recognizer import TranscriptionEngine
 from .settings import public_settings, test_deepseek, update_from_web
+from .translation import LocalEnglishChineseTranslator
 
 
 class EventHub:
@@ -73,6 +74,7 @@ def create_app(config: AppConfig) -> FastAPI:
     config.validate()
     hub = EventHub()
     engine = TranscriptionEngine(config, hub.publish)
+    translator = LocalEnglishChineseTranslator()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -114,7 +116,35 @@ def create_app(config: AppConfig) -> FastAPI:
     async def put_settings(request: Request, payload: dict) -> dict:
         require_local(request)
         saved = await asyncio.to_thread(update_from_web, payload)
+        if saved.get("liveTranslateEnabled"):
+            asyncio.create_task(asyncio.to_thread(translator.warmup))
         return {"ok": True, "settings": saved, "apiKeySet": public_settings()["apiKeySet"]}
+
+    @app.get("/api/translate/status")
+    async def translation_status(request: Request) -> dict:
+        require_local(request)
+        return translator.status()
+
+    @app.post("/api/translate/warmup")
+    async def translation_warmup(request: Request) -> dict:
+        require_local(request)
+        try:
+            return await asyncio.to_thread(translator.warmup)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/api/translate")
+    async def translate_english(request: Request, payload: dict) -> dict:
+        require_local(request)
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            return {"translation": "", **translator.status()}
+        if len(text) > 4000:
+            raise HTTPException(status_code=400, detail="翻译文本不能超过 4000 个字符")
+        try:
+            return await asyncio.to_thread(translator.translate, text)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/api/settings/test-deepseek")
     async def test_deepseek_api(request: Request) -> dict:
