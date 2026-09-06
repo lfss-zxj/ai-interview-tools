@@ -215,7 +215,7 @@ class TranscriptionEngine:
                 utterance = utterance[-self.config.target_rate * 30 :]
             if utterance.size < self.config.target_rate and not packet.is_final:
                 continue
-            segments, _info = model.transcribe(
+            segment_iterator, _info = model.transcribe(
                 utterance,
                 language="en",
                 beam_size=1,
@@ -225,21 +225,61 @@ class TranscriptionEngine:
                 condition_on_previous_text=False,
                 without_timestamps=True,
             )
-            text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
-            if text and (text != last_text or packet.is_final):
-                self.publish(
-                    {
-                        "type": "final" if packet.is_final else "partial",
-                        "segment_id": self._segment_id,
-                        "text": text,
-                        "language": "en",
-                    }
-                )
-                last_text = text
+            decoded = [segment for segment in segment_iterator if segment.text.strip()]
+            if packet.is_final:
+                for decoded_segment in decoded:
+                    text = decoded_segment.text.strip()
+                    self.publish(
+                        {
+                            "type": "final",
+                            "segment_id": self._segment_id,
+                            "text": text,
+                            "language": "en",
+                        }
+                    )
+                    self._segment_id += 1
+                last_text = ""
+            else:
+                commit_count = 0
+                # Only commit a punctuation-complete Whisper time segment after a newer
+                # segment has appeared. This avoids trusting temporary punctuation.
+                for index, decoded_segment in enumerate(decoded[:-1]):
+                    if decoded_segment.text.strip().endswith((".", "?", "!")):
+                        commit_count = index + 1
+                    else:
+                        break
+                if commit_count:
+                    for decoded_segment in decoded[:commit_count]:
+                        self.publish(
+                            {
+                                "type": "final",
+                                "segment_id": self._segment_id,
+                                "text": decoded_segment.text.strip(),
+                                "language": "en",
+                            }
+                        )
+                        self._segment_id += 1
+                    trim_samples = min(
+                        utterance.size,
+                        max(0, int(decoded[commit_count - 1].end * self.config.target_rate)),
+                    )
+                    utterance = utterance[trim_samples:].copy()
+                    decoded = decoded[commit_count:]
+                    last_text = ""
+                text = " ".join(item.text.strip() for item in decoded).strip()
+                if text and text != last_text:
+                    self.publish(
+                        {
+                            "type": "partial",
+                            "segment_id": self._segment_id,
+                            "text": text,
+                            "language": "en",
+                        }
+                    )
+                    last_text = text
             if packet.is_final:
                 utterance = np.empty(0, dtype=np.float32)
                 last_text = ""
-                self._segment_id += 1
 
     def _on_audio(self, segmenter: SpeechSegmenter, audio: np.ndarray) -> None:
         level, packets = segmenter.feed(audio)
