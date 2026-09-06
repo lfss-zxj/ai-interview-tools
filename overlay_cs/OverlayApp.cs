@@ -1480,7 +1480,9 @@ namespace WasapiParaformerOverlay
         private string partialTranslation = "";
         private int partialTranslationSegment = -1;
         private int translationVersion;
+        private int translationSession;
         private CancellationTokenSource translationCancellation;
+        private readonly SemaphoreSlim translationGate = new SemaphoreSlim(1, 1);
 
         internal OverlayWindow(OverlayConfig config)
         {
@@ -2015,6 +2017,7 @@ namespace WasapiParaformerOverlay
             }
             if (clearPartial)
             {
+                translationSession++;
                 partialTranslation = "";
                 partialTranslationSegment = -1;
             }
@@ -2025,7 +2028,8 @@ namespace WasapiParaformerOverlay
             CancelLocalTranslation(false);
             int version = translationVersion;
             CancellationTokenSource cancellation = new CancellationTokenSource();
-            translationCancellation = cancellation;
+            int session = translationSession;
+            if (!isFinal) translationCancellation = cancellation;
             if (isFinal)
             {
                 partialTranslation = "";
@@ -2034,9 +2038,20 @@ namespace WasapiParaformerOverlay
             try
             {
                 if (!isFinal) await Task.Delay(100, cancellation.Token);
-                string translated = await LocalTranslationClient.TranslateAsync(
-                    config.WebSocketUrl, source, cancellation.Token);
-                if (cancellation.IsCancellationRequested || version != translationVersion
+                await translationGate.WaitAsync(cancellation.Token);
+                string translated;
+                try
+                {
+                    string url = config.WebSocketUrl;
+                    translated = await LocalTranslationClient.TranslateAsync(
+                        url, source, cancellation.Token);
+                }
+                finally
+                {
+                    translationGate.Release();
+                }
+                if (cancellation.IsCancellationRequested || session != translationSession
+                    || (!isFinal && version != translationVersion)
                     || !config.LiveTranslateEnabled || string.IsNullOrWhiteSpace(translated)) return;
                 if (isFinal)
                 {
@@ -2075,12 +2090,12 @@ namespace WasapiParaformerOverlay
             catch (OperationCanceledException) { }
             catch (Exception error)
             {
-                if (version == translationVersion)
+                if (isFinal || version == translationVersion)
                     AppLog.Write("local translation error=" + error.Message);
             }
             finally
             {
-                if (translationCancellation == cancellation)
+                if (!isFinal && translationCancellation == cancellation)
                     translationCancellation = null;
                 cancellation.Dispose();
             }
