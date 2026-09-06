@@ -12,6 +12,9 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 
 from .capture import list_speakers
+from .autostart import disable as disable_autostart
+from .autostart import enable as enable_autostart
+from .autostart import status as autostart_status
 from .config import AppConfig
 from .recognizer import TranscriptionEngine
 from .settings import public_settings, test_deepseek, update_from_web
@@ -125,6 +128,20 @@ def create_app(config: AppConfig) -> FastAPI:
     async def get_settings(request: Request) -> dict:
         require_local(request)
         return await asyncio.to_thread(public_settings)
+
+    @app.get("/api/autostart")
+    async def get_autostart(request: Request) -> dict:
+        require_local(request)
+        return await asyncio.to_thread(autostart_status)
+
+    @app.post("/api/autostart")
+    async def set_autostart(request: Request, payload: dict) -> dict:
+        require_local(request)
+        try:
+            operation = enable_autostart if bool(payload.get("enabled")) else disable_autostart
+            return await asyncio.to_thread(operation)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/settings")
     async def put_settings(request: Request, payload: dict) -> dict:

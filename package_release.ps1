@@ -26,7 +26,7 @@ New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 $rootFiles = @(
     "README.md", "DEPLOYMENT.md", "LICENSE", "CHANGELOG.md", "SECURITY.md",
     "pyproject.toml", "install.ps1", "launch.ps1", "start.ps1", "start_overlay.ps1",
-    "verify_install.ps1", "build_overlay.ps1"
+    "verify_install.ps1", "build_overlay.ps1", "autostart.ps1"
 )
 foreach ($file in $rootFiles) { Copy-Item -LiteralPath (Join-Path $ProjectDir $file) -Destination $StageDir }
 New-Item -ItemType Directory -Path (Join-Path $StageDir "system_audio_asr\web") -Force | Out-Null

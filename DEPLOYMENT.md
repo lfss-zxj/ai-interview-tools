@@ -111,6 +111,23 @@ Invoke-RestMethod http://127.0.0.1:8765/devices
 
 健康状态中的 `state` 应最终为 `capturing`，且 `error` 应为 `null`。
 
+## 6.1 开机自启（可选）
+
+可直接在设置页勾选“登录 Windows 后自动启动 VoxRibbon”，或者执行：
+
+```powershell
+.\autostart.ps1 -Enable
+.\autostart.ps1 -Status
+```
+
+自启仅作用于当前 Windows 用户，不需要管理员权限。它会通过隐藏的 Windows Startup 脚本调用当前项目的 `launch.ps1`。关闭自启：
+
+```powershell
+.\autostart.ps1 -Disable
+```
+
+项目目录移动后，旧启动项不会自动找到新路径，需要在新目录再次启用。
+
 ## 7. 常见问题
 
 ### PowerShell 禁止运行脚本

@@ -146,6 +146,16 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\launch.ps1
 ```
 
+也可以在设置页勾选“登录 Windows 后自动启动 VoxRibbon”。这是当前用户级自启，不需要管理员权限，启动时不会弹出 PowerShell 窗口。命令行管理方式：
+
+```powershell
+.\autostart.ps1 -Enable   # 开启
+.\autostart.ps1 -Disable  # 关闭
+.\autostart.ps1 -Status   # 查看状态
+```
+
+如果以后移动了项目文件夹，请在新目录重新执行一次 `-Enable`。
+
 ### 新手常见问题
 
 | 现象 | 处理方法 |
