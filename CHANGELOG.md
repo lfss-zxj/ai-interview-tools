@@ -4,7 +4,8 @@
 
 ## [Unreleased]
 
-- 英文字幕按 Faster-Whisper 音频时间段切换：上一完整句 final 后，下一句使用新段。
+- 英文字幕在检测到下一句内容后立即 final 上一句，即使多句被 Whisper 放在同一时间段。
+- 启用实时翻译时随服务启动自动预热 OPUS-MT，避免首批译文排队。
 - 增加当前用户级无窗口开机自启、设置页开关和命令行管理脚本。
 - 增加不依赖 DeepSeek 的本地英文 → 中文 partial/final 实时翻译。
 - 增加 Faster-Whisper 英文专用 ASR，并支持在设置页动态切换中英文识别引擎。

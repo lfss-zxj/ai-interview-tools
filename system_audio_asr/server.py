@@ -17,7 +17,7 @@ from .autostart import enable as enable_autostart
 from .autostart import status as autostart_status
 from .config import AppConfig
 from .recognizer import TranscriptionEngine
-from .settings import public_settings, test_deepseek, update_from_web
+from .settings import load_settings, public_settings, test_deepseek, update_from_web
 from .translation import LocalEnglishChineseTranslator
 
 
@@ -97,11 +97,16 @@ def create_app(config: AppConfig) -> FastAPI:
     async def lifespan(_: FastAPI):
         hub.bind()
         dispatcher = asyncio.create_task(hub.dispatch())
+        translation_warmup = None
+        if load_settings().get("liveTranslateEnabled"):
+            translation_warmup = asyncio.create_task(asyncio.to_thread(translator.warmup))
         engine.start()
         try:
             yield
         finally:
             engine.stop()
+            if translation_warmup and not translation_warmup.done():
+                translation_warmup.cancel()
             dispatcher.cancel()
             try:
                 await dispatcher

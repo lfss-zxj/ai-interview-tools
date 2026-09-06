@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import re
 
 import numpy as np
 
@@ -121,3 +122,19 @@ def merge_stream_text(previous: str, incoming: str) -> str:
     )
     separator = " " if previous and (had_leading_space or ascii_word_boundary) else ""
     return previous + separator + incoming
+
+
+_ENGLISH_SENTENCE_END = re.compile(r"[.!?]+(?=\s|$)")
+
+
+def split_english_sentences(text: str) -> tuple[list[str], str]:
+    """Return punctuation-ended sentences and the remaining active tail."""
+    normalized = " ".join(text.split()).strip()
+    sentences: list[str] = []
+    start = 0
+    for match in _ENGLISH_SENTENCE_END.finditer(normalized):
+        sentence = normalized[start : match.end()].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = match.end()
+    return sentences, normalized[start:].strip()

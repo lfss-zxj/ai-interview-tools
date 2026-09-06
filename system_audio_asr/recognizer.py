@@ -11,7 +11,7 @@ import numpy as np
 
 from .capture import WasapiLoopbackCapture
 from .config import AppConfig
-from .segmenter import AudioPacket, SpeechSegmenter, merge_stream_text
+from .segmenter import AudioPacket, SpeechSegmenter, merge_stream_text, split_english_sentences
 
 
 def choose_device(requested: str) -> str:
@@ -202,6 +202,7 @@ class TranscriptionEngine:
 
         utterance = np.empty(0, dtype=np.float32)
         last_text = ""
+        committed_sentence_count = 0
         while not self._stop.is_set():
             try:
                 packet = self._packets.get(timeout=0.2)
@@ -226,9 +227,13 @@ class TranscriptionEngine:
                 without_timestamps=True,
             )
             decoded = [segment for segment in segment_iterator if segment.text.strip()]
+            hypothesis = " ".join(item.text.strip() for item in decoded).strip()
+            sentences, active_tail = split_english_sentences(hypothesis)
             if packet.is_final:
-                for decoded_segment in decoded:
-                    text = decoded_segment.text.strip()
+                remaining = sentences[committed_sentence_count:]
+                if active_tail:
+                    remaining.append(active_tail)
+                for text in remaining:
                     self.publish(
                         {
                             "type": "final",
@@ -240,33 +245,26 @@ class TranscriptionEngine:
                     self._segment_id += 1
                 last_text = ""
             else:
-                commit_count = 0
-                # Only commit a punctuation-complete Whisper time segment after a newer
-                # segment has appeared. This avoids trusting temporary punctuation.
-                for index, decoded_segment in enumerate(decoded[:-1]):
-                    if decoded_segment.text.strip().endswith((".", "?", "!")):
-                        commit_count = index + 1
-                    else:
-                        break
-                if commit_count:
-                    for decoded_segment in decoded[:commit_count]:
+                # A sentence is safe to finalize only after newer text exists behind it.
+                # A temporary punctuation mark at the very end remains part of the partial.
+                committable_count = len(sentences) if active_tail else max(0, len(sentences) - 1)
+                if committable_count > committed_sentence_count:
+                    for text in sentences[committed_sentence_count:committable_count]:
                         self.publish(
                             {
                                 "type": "final",
                                 "segment_id": self._segment_id,
-                                "text": decoded_segment.text.strip(),
+                                "text": text,
                                 "language": "en",
                             }
                         )
                         self._segment_id += 1
-                    trim_samples = min(
-                        utterance.size,
-                        max(0, int(decoded[commit_count - 1].end * self.config.target_rate)),
-                    )
-                    utterance = utterance[trim_samples:].copy()
-                    decoded = decoded[commit_count:]
+                    committed_sentence_count = committable_count
                     last_text = ""
-                text = " ".join(item.text.strip() for item in decoded).strip()
+                remaining_parts = sentences[committed_sentence_count:]
+                if active_tail:
+                    remaining_parts.append(active_tail)
+                text = " ".join(remaining_parts).strip()
                 if text and text != last_text:
                     self.publish(
                         {
@@ -280,6 +278,7 @@ class TranscriptionEngine:
             if packet.is_final:
                 utterance = np.empty(0, dtype=np.float32)
                 last_text = ""
+                committed_sentence_count = 0
 
     def _on_audio(self, segmenter: SpeechSegmenter, audio: np.ndarray) -> None:
         level, packets = segmenter.feed(audio)
