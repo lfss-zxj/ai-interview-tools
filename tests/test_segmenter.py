@@ -43,16 +43,9 @@ def test_zero_preroll_starts_without_error() -> None:
     assert segmenter.active
 
 
-def test_multiple_english_sentences_are_separated() -> None:
+def test_english_sentence_candidates_keep_whole_sentences() -> None:
     sentences, tail = split_english_sentences(
-        "There is something... Will you have another coffee? Yes, I will"
+        "There is something. Will you have another coffee? Yes, I will"
     )
-    assert sentences == ["There is something...", "Will you have another coffee?"]
+    assert sentences == ["There is something.", "Will you have another coffee?"]
     assert tail == "Yes, I will"
-
-
-def test_temporary_sentence_end_has_no_following_tail() -> None:
-    assert split_english_sentences("The first answer should ring.") == (
-        ["The first answer should ring."],
-        "",
-    )

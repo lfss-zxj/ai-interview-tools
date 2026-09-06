@@ -128,7 +128,6 @@ _ENGLISH_SENTENCE_END = re.compile(r"[.!?]+(?=\s|$)")
 
 
 def split_english_sentences(text: str) -> tuple[list[str], str]:
-    """Return punctuation-ended sentences and the remaining active tail."""
     normalized = " ".join(text.split()).strip()
     sentences: list[str] = []
     start = 0

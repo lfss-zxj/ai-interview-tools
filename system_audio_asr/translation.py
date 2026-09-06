@@ -75,7 +75,7 @@ class LocalEnglishChineseTranslator:
                     **encoded,
                     num_beams=1,
                     do_sample=False,
-                    max_new_tokens=128,
+                    max_length=128,
                 )
             if self._device.startswith("cuda"):
                 torch.cuda.synchronize()

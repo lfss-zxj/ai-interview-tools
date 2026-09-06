@@ -183,7 +183,7 @@ class TranscriptionEngine:
             self.config.target_rate,
             self.config.model_stride_samples,
             self.config.silence_db,
-            self.config.endpoint_silence_ms,
+            max(self.config.endpoint_silence_ms, 1500),
             self.config.preroll_ms,
         )
         self._capture = WasapiLoopbackCapture(
@@ -202,7 +202,10 @@ class TranscriptionEngine:
 
         utterance = np.empty(0, dtype=np.float32)
         last_text = ""
+        recent_final_context = ""
         committed_sentence_count = 0
+        pending_pair: tuple[str, str] | None = None
+        pending_pair_repeats = 0
         while not self._stop.is_set():
             try:
                 packet = self._packets.get(timeout=0.2)
@@ -225,15 +228,28 @@ class TranscriptionEngine:
                 vad_filter=False,
                 condition_on_previous_text=False,
                 without_timestamps=True,
+                word_timestamps=True,
+                initial_prompt=recent_final_context or None,
             )
-            decoded = [segment for segment in segment_iterator if segment.text.strip()]
+            decoded = [
+                segment
+                for segment in segment_iterator
+                if segment.text.strip().strip(".?!,;:- ")
+            ]
             hypothesis = " ".join(item.text.strip() for item in decoded).strip()
             sentences, active_tail = split_english_sentences(hypothesis)
+            sentence_end_times = [
+                float(word.end)
+                for decoded_segment in decoded
+                for word in (decoded_segment.words or [])
+                if word.word.strip().endswith((".", "?", "!"))
+            ]
             if packet.is_final:
                 remaining = sentences[committed_sentence_count:]
                 if active_tail:
                     remaining.append(active_tail)
-                for text in remaining:
+                for index in range(0, len(remaining), 2):
+                    text = " ".join(remaining[index : index + 2]).strip()
                     self.publish(
                         {
                             "type": "final",
@@ -243,25 +259,51 @@ class TranscriptionEngine:
                         }
                     )
                     self._segment_id += 1
+                    recent_final_context = (recent_final_context + " " + text).strip()[-240:]
                 last_text = ""
             else:
-                # A sentence is safe to finalize only after newer text exists behind it.
-                # A temporary punctuation mark at the very end remains part of the partial.
-                committable_count = len(sentences) if active_tail else max(0, len(sentences) - 1)
-                if committable_count > committed_sentence_count:
-                    for text in sentences[committed_sentence_count:committable_count]:
-                        self.publish(
-                            {
-                                "type": "final",
-                                "segment_id": self._segment_id,
-                                "text": text,
-                                "language": "en",
-                            }
+                remaining_sentences = sentences[committed_sentence_count:]
+                has_newer_content = len(remaining_sentences) > 2 or bool(active_tail)
+                candidate = (
+                    tuple(remaining_sentences[:2])
+                    if len(remaining_sentences) >= 2 and has_newer_content
+                    else None
+                )
+                if candidate is not None and candidate == pending_pair:
+                    pending_pair_repeats += 1
+                else:
+                    pending_pair = candidate
+                    pending_pair_repeats = 1 if candidate is not None else 0
+
+                display_start = committed_sentence_count
+                if pending_pair is not None and pending_pair_repeats >= 2:
+                    text = " ".join(pending_pair).strip()
+                    self.publish(
+                        {
+                            "type": "final",
+                            "segment_id": self._segment_id,
+                            "text": text,
+                            "language": "en",
+                        }
+                    )
+                    self._segment_id += 1
+                    recent_final_context = (recent_final_context + " " + text).strip()[-240:]
+                    pair_end = committed_sentence_count + 2
+                    if len(sentence_end_times) >= pair_end:
+                        trim_samples = min(
+                            utterance.size,
+                            max(0, int(sentence_end_times[pair_end - 1] * self.config.target_rate)),
                         )
-                        self._segment_id += 1
-                    committed_sentence_count = committable_count
+                        utterance = utterance[trim_samples:].copy()
+                        committed_sentence_count = 0
+                    else:
+                        committed_sentence_count = pair_end
+                    display_start = pair_end
+                    pending_pair = None
+                    pending_pair_repeats = 0
                     last_text = ""
-                remaining_parts = sentences[committed_sentence_count:]
+
+                remaining_parts = sentences[display_start:]
                 if active_tail:
                     remaining_parts.append(active_tail)
                 text = " ".join(remaining_parts).strip()
@@ -279,6 +321,8 @@ class TranscriptionEngine:
                 utterance = np.empty(0, dtype=np.float32)
                 last_text = ""
                 committed_sentence_count = 0
+                pending_pair = None
+                pending_pair_repeats = 0
 
     def _on_audio(self, segmenter: SpeechSegmenter, audio: np.ndarray) -> None:
         level, packets = segmenter.feed(audio)
