@@ -7,6 +7,10 @@ def test_overlay_height_is_bounded() -> None:
     assert normalize_settings({"height": 9999})["height"] == 800
 
 
+def test_two_column_overlay_has_minimum_width() -> None:
+    assert normalize_settings({"width": 200})["width"] == 520
+
+
 def test_lock_state_is_normalized() -> None:
     assert normalize_settings({"locked": True})["locked"] is True
     assert normalize_settings({"locked": False})["locked"] is False

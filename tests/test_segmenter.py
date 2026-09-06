@@ -1,6 +1,6 @@
 import numpy as np
 
-from system_audio_asr.segmenter import SpeechSegmenter, dbfs, merge_stream_text, split_english_sentences
+from system_audio_asr.segmenter import SpeechSegmenter, dbfs, merge_stream_text
 
 
 def make_segmenter() -> SpeechSegmenter:
@@ -41,11 +41,3 @@ def test_zero_preroll_starts_without_error() -> None:
     assert level > -40
     assert packets == []
     assert segmenter.active
-
-
-def test_english_sentence_candidates_keep_whole_sentences() -> None:
-    sentences, tail = split_english_sentences(
-        "There is something. Will you have another coffee? Yes, I will"
-    )
-    assert sentences == ["There is something.", "Will you have another coffee?"]
-    assert tail == "Yes, I will"

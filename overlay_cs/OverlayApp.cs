@@ -281,7 +281,7 @@ namespace WasapiParaformerOverlay
 
         internal void Normalize()
         {
-            Width = Math.Max(280, Math.Min(2200, Width));
+            Width = Math.Max(520, Math.Min(2200, Width));
             Height = Math.Max(72, Math.Min(800, Height));
             FontSize = Math.Max(12, Math.Min(96, FontSize));
             MaxLines = Math.Max(1, Math.Min(10, MaxLines));
@@ -1427,7 +1427,7 @@ namespace WasapiParaformerOverlay
         private readonly SubtitleState subtitle = new SubtitleState();
         private readonly Border background;
         private readonly ScrollViewer scroll;
-        private readonly TextBlock text;
+        private readonly Grid timeline;
         private readonly System.Windows.Threading.DispatcherTimer fadeTimer;
         private readonly System.Windows.Threading.DispatcherTimer aiTimer;
         private readonly System.Windows.Threading.DispatcherTimer configTimer;
@@ -1495,7 +1495,7 @@ namespace WasapiParaformerOverlay
             ShowActivated = false;
             Topmost = true;
             ResizeMode = ResizeMode.NoResize;
-            MinWidth = 280;
+            MinWidth = 520;
             MinHeight = 72;
             MaxWidth = 2200;
             MaxHeight = 800;
@@ -1508,24 +1508,10 @@ namespace WasapiParaformerOverlay
             background.Background = Brushes.Transparent;
             background.Padding = new Thickness(34, 14, 34, 14);
 
-            text = new TextBlock();
-            text.FontFamily = new FontFamily("Microsoft YaHei UI");
-            text.FontWeight = FontWeights.Normal;
-            text.Foreground = new LinearGradientBrush(
-                Color.FromRgb(255, 255, 255),
-                Color.FromRgb(220, 234, 250),
-                90);
-            text.TextAlignment = TextAlignment.Left;
-            text.TextWrapping = TextWrapping.Wrap;
-            text.VerticalAlignment = VerticalAlignment.Top;
-            text.Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 2,
-                ShadowDepth = 1,
-                Direction = 270,
-                Opacity = 0.82,
-                Color = Colors.Black
-            };
+            timeline = new Grid();
+            timeline.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            timeline.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
+            timeline.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             scroll = new ScrollViewer();
             scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
             scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
@@ -1544,7 +1530,7 @@ namespace WasapiParaformerOverlay
                         followLatest, scroll.VerticalOffset, scroll.ScrollableHeight));
                 }
             };
-            scroll.Content = text;
+            scroll.Content = timeline;
             background.Child = scroll;
             Grid chrome = new Grid();
             chrome.Children.Add(background);
@@ -1915,60 +1901,60 @@ namespace WasapiParaformerOverlay
             double previousOffset = scroll.VerticalOffset;
             bool keepFollowing = followLatest;
             rebuildingText = true;
-            text.Inlines.Clear();
+            timeline.Children.Clear();
+            timeline.RowDefinitions.Clear();
             if (preview)
             {
-                text.Inlines.Add(new Run("实时字幕预览 · 拖动字幕框调整位置"));
+                TextBlock previewText = CreateTimelineText(false);
+                previewText.Text = "左侧：听写原文    ·    右侧：译文 / AI 回复";
+                Grid.SetColumnSpan(previewText, 3);
+                timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                timeline.Children.Add(previewText);
             }
             else
             {
                 if (chatEntries.Count == 0 && subtitle.Partial.Length == 0)
                 {
-                    Run waiting = new Run("等待字幕…");
-                    waiting.Foreground = new SolidColorBrush(Color.FromArgb(150, 175, 190, 208));
-                    waiting.FontWeight = FontWeights.Normal;
-                    text.Inlines.Add(waiting);
+                    AddTimelineRow("等待字幕…", null, false, false);
                 }
+                List<Tuple<ChatEntry, List<ChatEntry>>> rows =
+                    new List<Tuple<ChatEntry, List<ChatEntry>>>();
                 for (int index = 0; index < chatEntries.Count; index++)
                 {
                     ChatEntry entry = chatEntries[index];
-                    bool user = entry.Role == "user";
-                    if (!user)
+                    if (entry.Role == "user")
                     {
-                        bool translated = entry.Role == "translation";
-                        Run label = new Run(translated ? "译文  " : "AI    ");
-                        label.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
-                        label.FontWeight = FontWeights.SemiBold;
-                        text.Inlines.Add(label);
+                        rows.Add(Tuple.Create(entry, new List<ChatEntry>()));
                     }
-                    Run content = new Run(entry.Text + (entry.Streaming ? " ▍" : ""));
-                    content.Foreground = user
-                        ? BrushFromHex(config.TextColor, 245)
-                        : new SolidColorBrush(Color.FromRgb(116, 232, 255));
-                    content.FontWeight = FontWeights.Normal;
-                    text.Inlines.Add(content);
-                    if (index < chatEntries.Count - 1 || subtitle.Partial.Length > 0)
-                        text.Inlines.Add(new LineBreak());
+                    else if (rows.Count > 0)
+                    {
+                        rows[rows.Count - 1].Item2.Add(entry);
+                    }
+                    else
+                    {
+                        ChatEntry empty = new ChatEntry { Role = "user", Text = "", SegmentId = -1 };
+                        List<ChatEntry> responses = new List<ChatEntry>();
+                        responses.Add(entry);
+                        rows.Add(Tuple.Create(empty, responses));
+                    }
+                }
+                foreach (Tuple<ChatEntry, List<ChatEntry>> row in rows)
+                {
+                    AddTimelineRow(row.Item1.Text, row.Item2, false, false);
                 }
                 if (subtitle.Partial.Length > 0)
                 {
-                    Run partialRun = new Run(subtitle.Partial + " ▍");
-                    partialRun.Foreground = BrushFromHex(config.TextColor, 255);
-                    partialRun.FontWeight = FontWeights.Normal;
-                    text.Inlines.Add(partialRun);
+                    List<ChatEntry> response = new List<ChatEntry>();
                     if (partialTranslation.Length > 0
                         && partialTranslationSegment == subtitle.PartialSegment)
-                    {
-                        text.Inlines.Add(new LineBreak());
-                        Run translatedLabel = new Run("译文  ");
-                        translatedLabel.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
-                        translatedLabel.FontWeight = FontWeights.SemiBold;
-                        text.Inlines.Add(translatedLabel);
-                        Run translatedPartial = new Run(partialTranslation + " ▍");
-                        translatedPartial.Foreground = new SolidColorBrush(Color.FromRgb(116, 232, 255));
-                        translatedPartial.FontWeight = FontWeights.Normal;
-                        text.Inlines.Add(translatedPartial);
-                    }
+                        response.Add(new ChatEntry
+                        {
+                            Role = "translation",
+                            Text = partialTranslation,
+                            Streaming = true,
+                            SegmentId = subtitle.PartialSegment
+                        });
+                    AddTimelineRow(subtitle.Partial, response, true, true);
                 }
             }
             rebuildingText = false;
@@ -1984,6 +1970,73 @@ namespace WasapiParaformerOverlay
                 }
                 finally { internalScrollChange = false; }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private TextBlock CreateTimelineText(bool response)
+        {
+            TextBlock block = new TextBlock();
+            block.FontFamily = new FontFamily(config.FontFamilyName);
+            block.FontSize = config.FontSize;
+            block.FontWeight = FontWeights.Normal;
+            block.Foreground = response
+                ? new SolidColorBrush(Color.FromRgb(116, 232, 255))
+                : BrushFromHex(config.TextColor, 245);
+            block.TextAlignment = TextAlignment.Left;
+            block.TextWrapping = TextWrapping.Wrap;
+            block.VerticalAlignment = VerticalAlignment.Top;
+            block.LineHeight = config.FontSize * 1.38;
+            block.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 2,
+                ShadowDepth = 1,
+                Direction = 270,
+                Opacity = 0.82,
+                Color = Colors.Black
+            };
+            return block;
+        }
+
+        private void AddTimelineRow(
+            string source, IList<ChatEntry> responses, bool sourceStreaming, bool active)
+        {
+            int row = timeline.RowDefinitions.Count;
+            timeline.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            TextBlock left = CreateTimelineText(false);
+            left.Margin = new Thickness(0, 0, 4, active ? 0 : 10);
+            left.Text = (source ?? "") + (sourceStreaming ? " ▍" : "");
+            if (source == "等待字幕…")
+                left.Foreground = new SolidColorBrush(Color.FromArgb(150, 175, 190, 208));
+            Grid.SetRow(left, row);
+            Grid.SetColumn(left, 0);
+            timeline.Children.Add(left);
+
+            Border divider = new Border();
+            divider.Width = 1;
+            divider.HorizontalAlignment = HorizontalAlignment.Center;
+            divider.Margin = new Thickness(0, 0, 0, active ? 0 : 10);
+            divider.Background = new SolidColorBrush(Color.FromArgb(72, 125, 190, 255));
+            Grid.SetRow(divider, row);
+            Grid.SetColumn(divider, 1);
+            timeline.Children.Add(divider);
+
+            TextBlock right = CreateTimelineText(true);
+            right.Margin = new Thickness(4, 0, 0, active ? 0 : 10);
+            if (responses != null)
+            {
+                for (int index = 0; index < responses.Count; index++)
+                {
+                    ChatEntry response = responses[index];
+                    if (index > 0) right.Inlines.Add(new LineBreak());
+                    Run label = new Run(response.Role == "translation" ? "译文  " : "AI  ");
+                    label.FontWeight = FontWeights.SemiBold;
+                    right.Inlines.Add(label);
+                    right.Inlines.Add(new Run(response.Text + (response.Streaming ? " ▍" : "")));
+                }
+            }
+            Grid.SetRow(right, row);
+            Grid.SetColumn(right, 2);
+            timeline.Children.Add(right);
         }
 
         private void TrimChatEntries()
@@ -2354,6 +2407,7 @@ namespace WasapiParaformerOverlay
         {
             config.FontSize = value;
             ApplySize(true);
+            RefreshText();
             PositionSettings();
         }
 
@@ -2370,7 +2424,6 @@ namespace WasapiParaformerOverlay
         internal void SetTextColor(string value)
         {
             config.TextColor = value;
-            text.Foreground = BrushFromHex(value, 255);
             RefreshText();
             SaveConfig();
         }
@@ -2770,10 +2823,6 @@ namespace WasapiParaformerOverlay
             {
                 Width = config.Width;
                 Height = config.Height;
-                text.FontSize = config.FontSize;
-                text.FontFamily = new FontFamily(config.FontFamilyName);
-                text.Foreground = BrushFromHex(config.TextColor, 255);
-                text.LineHeight = config.FontSize * 1.38;
                 scroll.MaxHeight = double.PositiveInfinity;
                 if (keepAnchor && !double.IsNaN(oldCenter) && ActualWidth > 0)
                 {

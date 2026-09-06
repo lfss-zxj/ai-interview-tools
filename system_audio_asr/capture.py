@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import ctypes
 import os
-import sys
 import threading
 from collections.abc import Callable
 
 import numpy as np
+import soundcard as sc
 
 
 def list_speakers() -> list[dict[str, object]]:
-    import soundcard as sc
-
     default = sc.default_speaker()
     return [
         {"id": str(item.id), "name": str(item.name), "default": str(item.id) == str(default.id)}
@@ -20,8 +18,6 @@ def list_speakers() -> list[dict[str, object]]:
 
 
 def _select_speaker(selector: str | None):
-    import soundcard as sc
-
     if not selector:
         return sc.default_speaker()
     key = selector.casefold()
@@ -63,14 +59,9 @@ class WasapiLoopbackCapture:
     def run(self) -> None:
         com_initialized = False
         try:
-            soundcard_was_loaded = "soundcard.mediafoundation" in sys.modules
-            import soundcard as sc
-
-            # SoundCard initializes COM only when its backend module is first imported.
-            # A dynamically restarted capture thread reuses that module and must initialize
-            # COM for itself. Do not initialize before the first import: SoundCard treats
-            # the valid S_FALSE result from a second CoInitializeEx call as an error.
-            if os.name == "nt" and soundcard_was_loaded:
+            # SoundCard's backend is imported once on the main thread. Every capture
+            # thread still needs its own COM apartment.
+            if os.name == "nt":
                 initialize = ctypes.windll.ole32.CoInitializeEx
                 initialize.argtypes = [ctypes.c_void_p, ctypes.c_uint]
                 initialize.restype = ctypes.c_long

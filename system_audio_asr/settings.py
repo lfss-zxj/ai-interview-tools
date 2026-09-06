@@ -131,7 +131,7 @@ def load_settings(path: Path = CONFIG_PATH, *, strict: bool = False) -> dict[str
 def normalize_settings(value: dict[str, Any]) -> dict[str, Any]:
     result = dict(DEFAULTS)
     result.update({key: item for key, item in value.items() if key in DEFAULTS})
-    result["width"] = max(280.0, min(2200.0, float(result["width"])))
+    result["width"] = max(520.0, min(2200.0, float(result["width"])))
     result["height"] = max(72.0, min(800.0, float(result["height"])))
     result["fontSize"] = max(12.0, min(96.0, float(result["fontSize"])))
     result["maxLines"] = max(1, min(10, int(result["maxLines"])))
